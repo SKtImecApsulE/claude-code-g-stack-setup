@@ -155,40 +155,14 @@ Motivated by: "${ref.subject}" from ${ref.from}` : ""),
         blockReason: taskType ? `task type '${taskType}' is always-escalate (never autonomous)` : `no classification rule for ${event.toolName} with these args — unknown defaults to escalate`
       };
     });
-    api.on("after_tool_call", (event) => {
-      if (!GATED_TOOLS.has(event.toolName) || event.error)
-        return;
-      const taskType = classify(event.toolName, event.params ?? {});
+    const ledgerExec = (tool, params, resultSummary, reversible, inverse) => {
+      const taskType = classify(tool, params);
       const tier = tierOf(taskType);
-      const inverses = {
-        gmail_archive: () => ({
-          reversible: true,
-          inverse: { op: "unarchive", email_id: event.params.email_id }
-        }),
-        gmail_create_draft: () => ({
-          reversible: true,
-          inverse: { op: "discard_draft", draft_id: event.result?.draft_id }
-        }),
-        gmail_send_draft: () => ({ reversible: false }),
-        calendar_hold: () => ({
-          reversible: true,
-          inverse: { op: "delete_hold", hold_id: event.result?.hold_id }
-        })
-      };
-      const inv = inverses[event.toolName]?.() ?? { reversible: false };
-      ledgerAppend({
-        tool: event.toolName,
-        params: event.params ?? {},
-        taskType,
-        tier,
-        reversible: inv.reversible,
-        inverse: inv.inverse,
-        resultSummary: JSON.stringify(event.result ?? null).slice(0, 200)
-      });
+      ledgerAppend({ tool, params, taskType, tier, reversible, inverse, resultSummary });
       if (taskType && tier === "confirm") {
         db.prepare("UPDATE task_types SET streak = streak + 1 WHERE name = ?").run(taskType);
       }
-    });
+    };
     api.registerTool({
       name: "gmail_list_inbox",
       description: "List inbox emails (mock mailbox). Read-only, ungated.",
@@ -215,6 +189,10 @@ Motivated by: "${ref.subject}" from ${ref.from}` : ""),
           return text(`no such email: ${params.email_id}`);
         e.archived = true;
         saveMailbox(mb);
+        ledgerExec("gmail_archive", params, `archived ${e.id} ("${e.subject}")`, true, {
+          op: "unarchive",
+          email_id: e.id
+        });
         return { ...text(`archived ${e.id} ("${e.subject}")`), email_id: e.id };
       }
     });
@@ -236,6 +214,10 @@ Motivated by: "${ref.subject}" from ${ref.from}` : ""),
         const draft = { id: `d${++mb.seq}`, to: params.to, body: params.body, sent: false };
         mb.drafts.push(draft);
         saveMailbox(mb);
+        ledgerExec("gmail_create_draft", params, `draft ${draft.id} for ${draft.to}`, true, {
+          op: "discard_draft",
+          draft_id: draft.id
+        });
         return { ...text(`draft ${draft.id} created for ${draft.to}`), draft_id: draft.id };
       }
     });
@@ -255,6 +237,7 @@ Motivated by: "${ref.subject}" from ${ref.from}` : ""),
           return text(`no such draft: ${params.draft_id}`);
         d.sent = true;
         saveMailbox(mb);
+        ledgerExec("gmail_send_draft", params, `sent draft ${d.id} to ${d.to}`, false);
         return text(`sent draft ${d.id} to ${d.to} ✓`);
       }
     });
@@ -272,6 +255,10 @@ Motivated by: "${ref.subject}" from ${ref.from}` : ""),
         const hold = { id: `h${++mb.seq}`, title: params.title, when: params.when };
         mb.holds.push(hold);
         saveMailbox(mb);
+        ledgerExec("calendar_hold", params, `hold ${hold.id} "${hold.title}" ${hold.when}`, true, {
+          op: "delete_hold",
+          hold_id: hold.id
+        });
         return { ...text(`hold ${hold.id}: "${hold.title}" at ${hold.when}`), hold_id: hold.id };
       }
     });

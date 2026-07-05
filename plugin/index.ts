@@ -232,40 +232,24 @@ export default {
       };
     });
 
-    // ── the ledger (every executed gated action, with inverse pointers) ──
-    api.on("after_tool_call", (event: any) => {
-      if (!GATED_TOOLS.has(event.toolName) || event.error) return;
-      const taskType = classify(event.toolName, event.params ?? {});
+    // ── the ledger: written inside each tool's execute (the plugin owns
+    // execution, so ledgering cannot be skipped by hook-delivery semantics;
+    // after_tool_call proved unreliable for plugin-registered tools) ──
+    const ledgerExec = (
+      tool: string,
+      params: Record<string, unknown>,
+      resultSummary: string,
+      reversible: boolean,
+      inverse?: Record<string, unknown>
+    ) => {
+      const taskType = classify(tool, params);
       const tier = tierOf(taskType);
-      const inverses: Record<string, () => { reversible: boolean; inverse?: any }> = {
-        gmail_archive: () => ({
-          reversible: true,
-          inverse: { op: "unarchive", email_id: event.params.email_id },
-        }),
-        gmail_create_draft: () => ({
-          reversible: true,
-          inverse: { op: "discard_draft", draft_id: (event.result as any)?.draft_id },
-        }),
-        gmail_send_draft: () => ({ reversible: false }),
-        calendar_hold: () => ({
-          reversible: true,
-          inverse: { op: "delete_hold", hold_id: (event.result as any)?.hold_id },
-        }),
-      };
-      const inv = inverses[event.toolName]?.() ?? { reversible: false };
-      ledgerAppend({
-        tool: event.toolName,
-        params: event.params ?? {},
-        taskType,
-        tier,
-        reversible: inv.reversible,
-        inverse: inv.inverse,
-        resultSummary: JSON.stringify(event.result ?? null).slice(0, 200),
-      });
+      ledgerAppend({ tool, params, taskType, tier, reversible, inverse, resultSummary });
+      // A confirm-tier action only executes after an approval → count the streak.
       if (taskType && tier === "confirm") {
         db.prepare("UPDATE task_types SET streak = streak + 1 WHERE name = ?").run(taskType);
       }
-    });
+    };
 
     // ── mock Gmail/Calendar tools (replaced by real MCP after OAuth) ──
     api.registerTool({
@@ -297,6 +281,10 @@ export default {
         if (!e) return text(`no such email: ${params.email_id}`);
         e.archived = true;
         saveMailbox(mb);
+        ledgerExec("gmail_archive", params, `archived ${e.id} ("${e.subject}")`, true, {
+          op: "unarchive",
+          email_id: e.id,
+        });
         return { ...text(`archived ${e.id} ("${e.subject}")`), email_id: e.id };
       },
     });
@@ -318,6 +306,10 @@ export default {
         const draft = { id: `d${++mb.seq}`, to: params.to, body: params.body, sent: false };
         mb.drafts.push(draft);
         saveMailbox(mb);
+        ledgerExec("gmail_create_draft", params, `draft ${draft.id} for ${draft.to}`, true, {
+          op: "discard_draft",
+          draft_id: draft.id,
+        });
         return { ...text(`draft ${draft.id} created for ${draft.to}`), draft_id: draft.id };
       },
     });
@@ -336,6 +328,7 @@ export default {
         if (!d || d.discarded) return text(`no such draft: ${params.draft_id}`);
         d.sent = true;
         saveMailbox(mb);
+        ledgerExec("gmail_send_draft", params, `sent draft ${d.id} to ${d.to}`, false);
         return text(`sent draft ${d.id} to ${d.to} ✓`);
       },
     });
@@ -353,6 +346,10 @@ export default {
         const hold = { id: `h${++mb.seq}`, title: params.title, when: params.when };
         mb.holds.push(hold);
         saveMailbox(mb);
+        ledgerExec("calendar_hold", params, `hold ${hold.id} "${hold.title}" ${hold.when}`, true, {
+          op: "delete_hold",
+          hold_id: hold.id,
+        });
         return { ...text(`hold ${hold.id}: "${hold.title}" at ${hold.when}`), hold_id: hold.id };
       },
     });
