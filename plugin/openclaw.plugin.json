@@ -5,13 +5,16 @@
   "contracts": {
     "tools": [
       "gmail_list_inbox",
+      "gmail_read_email",
       "gmail_archive",
       "gmail_create_draft",
       "gmail_send_draft",
       "calendar_hold",
       "trust_ledger",
       "trust_undo",
-      "trust_policy"
+      "trust_policy",
+      "trust_promote",
+      "trust_revoke"
     ]
   },
   "activation": {
