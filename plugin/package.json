@@ -1,0 +1,16 @@
+{
+  "name": "@personal-assistant/openclaw-trust-layer",
+  "version": "0.1.0",
+  "type": "module",
+  "openclaw": {
+    "extensions": ["./dist/index.js"],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    },
+    "build": {
+      "openclawVersion": "2026.6.11",
+      "pluginSdkVersion": "2026.6.11"
+    }
+  }
+}

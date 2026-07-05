@@ -1,0 +1,24 @@
+{
+  "id": "trust-layer",
+  "name": "Trust Layer",
+  "description": "Tiered-autonomy gate, action ledger, and undo for the personal assistant (mock Gmail/Calendar tools in v0)",
+  "contracts": {
+    "tools": [
+      "gmail_list_inbox",
+      "gmail_archive",
+      "gmail_create_draft",
+      "gmail_send_draft",
+      "calendar_hold",
+      "trust_ledger",
+      "trust_undo",
+      "trust_policy"
+    ]
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false
+  }
+}
