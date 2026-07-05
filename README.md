@@ -10,7 +10,12 @@ Design doc + eng review: `~/.gstack/projects/.../root-claude-gstack-setup-14m35k
 - Mock Gmail/Calendar tools (JSON mailbox) so the loop runs without Google credentials
 - **Tier gate** (`before_tool_call` → `requireApproval`): newsletter archive runs at `auto`; drafts/sends/holds require your ✅; financial email always escalates (verified: invoice archive blocked)
 - **Approval loop**: pending approval cites the motivating email; `allow-once` executes the tool (verified: draft created after approval; denied on timeout otherwise — fails closed)
-- **Ledger + policy + undo**: `trust_ledger`, `trust_policy`, `trust_undo` tools (SQLite at `~/.personal-assistant/trust-layer.db`)
+- **Ledger + policy + undo**: `trust_ledger`, `trust_policy`, `trust_undo` tools (SQLite at `~/.personal-assistant/trust-layer.db`); undo re-validates preconditions ("world changed" reporting), halts at irreversible entries, and is itself ledgered
+- **Injection defense (2A)**: reading any email body marks the session content-bearing — auto-tier is disabled for the rest of that session. Verified live: hostile email read, its injected instructions ignored, and a follow-up auto-tier action was forced to confirm and failed closed
+- **Promotion with receipts**: executed confirm-tier actions build streaks; a deny resets the streak; at 10 the agent pitches for promotion; `trust_promote` is itself approval-gated (severity: critical) and undoable; `trust_revoke` never needs approval
+- **Budget metering**: per-day model calls/tokens/USD tracked via `model_call_ended` into the same DB; $2/day warn and $5/day throttle notes; visible in `trust_policy`
+- **Morning briefing cron** at 07:00 (`openclaw cron list`) — doubles as the daily heartbeat
+- **Tests**: `node --test plugin/test.mjs` — classifier, gate tiers, session provenance, ledger+streaks, deny-reset, promotion lifecycle, undo preconditions. 8/8 passing
 
 ## Run it
 
