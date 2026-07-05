@@ -32,7 +32,15 @@ Approvals surface in the Control UI at `http://127.0.0.1:18789/?token=<token>`, 
 
 ## To go live (needs your accounts)
 
-1. **Telegram**: `openclaw channels add telegram` with a BotFather token — approvals then arrive as real chat prompts.
+1. **Telegram** (run on your own machine/VPS — Telegram's API is blocked from sandboxed CI/cloud containers):
+   ```bash
+   # In Telegram: message @BotFather → /newbot → copy the token
+   openclaw channels add --channel telegram --bot-token "<YOUR_BOT_TOKEN>"
+   openclaw gateway restart   # or stop + start
+   # DM your bot once; it replies with a pairing code (owner-only by default):
+   openclaw pairing approve telegram <CODE>
+   ```
+   Approvals (the ✅/❌ on drafts, sends, holds) then arrive as Telegram prompts. Keep `dmPolicy: "pairing"` — it's the owner-only access guardrail from the design.
 2. **Google**: swap the mock tools for Gmail/Calendar MCP (`gws mcp -s gmail,calendar` or gogcli). Flip the OAuth app to "In production" first (see design doc, tension 3).
 3. Host on any always-on box via Docker; put `~/.personal-assistant/` on a volume.
 
