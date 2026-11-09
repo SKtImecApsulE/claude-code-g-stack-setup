@@ -32,3 +32,10 @@ Use ~/.claude/skills/gstack/... for gstack file paths (the global path).
 - Transcript ingest: off (needs explicit consent)
 - Current repo policy: read-write
 - Fresh machine or new cloud session: run `./scripts/setup-brain.sh` (the brain lives in ~/.gbrain and does not persist across ephemeral containers)
+
+## GBrain Visual Answers
+Whenever you answer a question using the gbrain MCP tools (`search`, `query`, `recall`, `entity`, `traverse_graph`, `get_backlinks`), end the answer with a Mermaid diagram (```mermaid fenced block, `graph LR`):
+- Center node: the user's question. Other nodes: the brain pages/entities actually used, labeled by slug.
+- Edges: links between those pages (from `traverse_graph`/`get_links`/`get_backlinks` when available); otherwise an edge from the question to each page that backed a claim.
+- Keep it to at most about 12 nodes; skip the diagram if the brain returned nothing.
+- Draw only what the brain returned. Never invent pages or links.
