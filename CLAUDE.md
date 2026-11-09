@@ -22,6 +22,10 @@ Using gstack skills: After install, skills like /qa, /ship, /review, /investigat
 and /browse are available. Use /browse for all web browsing.
 Use ~/.claude/skills/gstack/... for gstack file paths (the global path).
 
+## Advisor rule
+
+Consult the `opus-advisor` subagent (Opus 5.5) before locking a plan, after the same error twice, and before calling a task done.
+
 ## GBrain Configuration (configured by /setup-gbrain)
 - Mode: local-stdio
 - Engine: pglite (keyword search; add OPENAI_API_KEY or VOYAGE_API_KEY and re-run `gbrain init --force --pglite --embedding-model <id>` for semantic search)
