@@ -59,15 +59,21 @@ aside .snip { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; whi
 <!-- DATA: replaced on every question. nodes: id, label, type, hit (used in answer), snippet. edges: s, t, kind ("hit" = question to used page, "link" = page to page). -->
 <script id="data" type="application/json">
 {
-  "question": "gstack setup claude code",
+  "question": "How does the assistant decide what it can do without asking, and how do I undo it?",
   "nodes": [
-    {"id": "docs/design", "label": "docs/design", "type": "note", "hit": true, "snippet": "Design: Personal Assistant, a chat-first automation agent that earns your trust. Next Steps: spike checklist, stand up OpenClaw + Telegram + Claude, wire Gmail/Calendar, build the trust-layer tiers."},
-    {"id": "setup-gbrain-smoke-test-1794221407", "label": "setup-gbrain-smoke-test", "type": "concept", "hit": true, "snippet": "Set up on Mon Nov 9 10:50:07 UTC 2026. Smoke test for /setup-gbrain."},
-    {"id": "changelog", "label": "changelog", "type": "note", "hit": false, "snippet": "Changelog (not used in this answer)."}
+    {"id": "docs/design", "label": "docs/design", "type": "note", "hit": true, "snippet": "Design: Personal Assistant, a chat-first automation agent that earns your trust. Status: APPROVED. Approach B: OpenClaw runtime + custom trust-layer plugin."},
+    {"id": "changelog", "label": "changelog", "type": "note", "hit": true, "snippet": "v0.1.0.0 (2026-07-05): first shipped version of the Personal Assistant, built on OpenClaw with a custom trust-layer plugin."},
+    {"id": "sec:tier-gate", "label": "v1 scope: tier gate", "type": "section", "hit": true, "snippet": "Tier gate is OpenClaw's before_tool_call hook returning requireApproval. Decision is auto / draft-and-confirm / always-escalate, keyed by deterministically classified task type. Hook errors fail closed (escalate). Stale approvals are re-validated and expire after 24h."},
+    {"id": "sec:undo", "label": "What makes this cool", "type": "section", "hit": true, "snippet": "One-word undo: every action lands in a ledger with an inverse action recorded, so 'undo' in chat rolls back the last action(s). Promotion with receipts: the agent tracks its own per-task record and pitches for more autonomy with evidence."},
+    {"id": "sec:trust-layer", "label": "v0.1.0.0 trust layer", "type": "section", "hit": true, "snippet": "Deterministic classifier (unknown escalates); append-only SQLite ledger; undo is LIFO, precondition-checked, halts at irreversible entries; promotion pitch at 10 approvals; trust_revoke never needs approval; $2 warn / $5 throttle daily budget."},
+    {"id": "setup-gbrain-smoke-test-1794221407", "label": "setup-gbrain-smoke-test", "type": "concept", "hit": false, "snippet": "Set up on Mon Nov 9 10:50:07 UTC 2026. Smoke test for /setup-gbrain. (not used in this answer)"}
   ],
   "edges": [
     {"s": "__q", "t": "docs/design", "kind": "hit"},
-    {"s": "__q", "t": "setup-gbrain-smoke-test-1794221407", "kind": "hit"}
+    {"s": "__q", "t": "changelog", "kind": "hit"},
+    {"s": "docs/design", "t": "sec:tier-gate", "kind": "link"},
+    {"s": "docs/design", "t": "sec:undo", "kind": "link"},
+    {"s": "changelog", "t": "sec:trust-layer", "kind": "link"}
   ]
 }
 </script>
