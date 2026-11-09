@@ -188,6 +188,13 @@ aside .snip { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; whi
   function up() { drag = null; panning = null; cv.classList.remove('drag'); }
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
   cv.addEventListener('wheel', function (ev) { ev.preventDefault(); cam.k = Math.min(3, Math.max(.4, cam.k * (ev.deltaY < 0 ? 1.1 : .9))); }, { passive: false });
+  function fitView() {
+    var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    nodes.forEach(function (n) { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y); });
+    var k = Math.min(2.2, Math.max(.4, Math.min(W / (x1 - x0 + 220), H / (y1 - y0 + 200))));
+    cam.k = k; cam.x = -((x0 + x1) / 2) * k; cam.y = -((y0 + y1) / 2) * k;
+  }
+  setTimeout(fitView, 1800);
   show(nodes[0]);
 })();
 </script>
