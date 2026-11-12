@@ -25,11 +25,14 @@
         <div class="stage-top">
           <span id="viewLabel" class="badge"></span>
           <span class="spacer"></span>
+          <button id="modeBtn" class="pill" aria-label="Switch berths between day and night setup" hidden></button>
+          <button id="mapBtn" class="pill" aria-label="Show the route map">Route</button>
           <button id="timeBtn" class="pill" aria-label="Change time of day"></button>
           <button id="expandBtn" class="pill" aria-label="Toggle full screen view">&#x26F6;</button>
         </div>
         <p id="hint" class="hint">Drag to look around</p>
         <div class="stage-bottom" id="lookBtns"></div>
+        <div id="routeMap" class="route-map" hidden></div>
         <div id="stageMsg" class="stage-msg" hidden></div>
       </section>
 

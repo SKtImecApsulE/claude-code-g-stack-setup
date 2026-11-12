@@ -249,3 +249,38 @@ a.book { display: block; text-align: center; text-decoration: none; }
 .bar-title strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .train-head strong { min-width: 0; }
 .train-head { gap: 10px; }
+
+/* ---------- ticket, fare, availability, route map ---------- */
+
+.ticket { display: grid; gap: 6px; margin-bottom: 10px; justify-items: center; text-align: center; font-size: 12.5px; }
+.ticket .chips { justify-content: center; }
+.chip.sel { border-color: var(--accent); color: var(--text); }
+.chip.warn { color: var(--warn); background: rgba(231, 184, 74, 0.13); }
+.avail { display: grid; gap: 8px; justify-items: center; margin-bottom: 12px; text-align: center; }
+.avail .msg { padding: 0; font-size: 13px; }
+.fare { margin: 0; font-size: 13px; }
+.fare b { font-size: 20px; color: var(--text); margin-right: 6px; }
+.days { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.day { display: grid; padding: 5px 9px; border-radius: 10px; background: var(--surface-2); min-width: 58px; }
+.day small { font-size: 10.5px; color: var(--muted); }
+.day b { font-size: 12.5px; }
+.day.good b { color: var(--good); }
+.day.warn b { color: var(--warn); }
+.day.bad b { color: var(--bad); }
+.fine { margin: 0; font-size: 11px; color: var(--muted); }
+
+.route-map {
+  position: absolute; left: 10px; bottom: 58px; width: min(46%, 230px); aspect-ratio: 1; z-index: 2; cursor: pointer;
+  background: rgba(14, 19, 32, 0.82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 16px; display: grid; place-items: center;
+  color: var(--muted); font-size: 12.5px; text-align: center; padding: 4px;
+}
+.route-map svg { width: 100%; height: 100%; }
+.route-map .all { fill: none; stroke: #5a6788; stroke-width: 2; stroke-linejoin: round; }
+.route-map .leg { fill: none; stroke: var(--accent); stroke-width: 3.5; stroke-linejoin: round; stroke-linecap: round; }
+.route-map circle { fill: var(--bg); stroke: var(--accent); stroke-width: 2.5; }
+.route-map circle.to { fill: var(--accent); }
+.route-map text { fill: var(--text); font-size: 11px; font-weight: 700; paint-order: stroke; stroke: rgba(14, 19, 32, 0.9); stroke-width: 3px; }
+.route-map .north { fill: var(--muted); font-size: 9px; font-weight: 600; }
+.stage-top { flex-wrap: wrap; row-gap: 6px; }
+.stage-top .pill { padding: 6px 10px; font-size: 12px; }

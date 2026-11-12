@@ -16,8 +16,12 @@ const ALLOWED = [
   [/^\/trains\/[0-9A-Za-z_-]{1,20}$/, 21600],
   [/^\/trains\/[0-9A-Za-z_-]{1,20}\/coaches$/, 21600],
   [/^\/trains\/[0-9A-Za-z_-]{1,20}\/route$/, 604800],
+  [/^\/trains\/[0-9A-Za-z_-]{1,20}\/fare$/, 21600],
+  [/^\/trains\/[0-9A-Za-z_-]{1,20}\/seats$/, 900],
+  // PNR lookups are personal: never cached
+  [/^\/pnr\/\d{10}$/, 0],
 ];
-const PARAMS = ['q', 'limit', 'date', 'type', 'haltsOnly', 'format', 'stops', 'byCity'];
+const PARAMS = ['q', 'limit', 'date', 'type', 'haltsOnly', 'format', 'stops', 'byCity', 'source', 'destination', 'journeyDate', 'classCode', 'quotaCode'];
 
 function send(res, status, body, cache = 0) {
   res.statusCode = status;

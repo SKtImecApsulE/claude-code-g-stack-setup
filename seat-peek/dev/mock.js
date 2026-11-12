@@ -80,5 +80,35 @@ export default function mock(path, params) {
       ],
     });
   }
+  if ((m = path.match(/^\/trains\/(\w+)\/fare$/))) {
+    return ok({ trainNumber: m[1], trainName: 'MOCK', distance: 705, breakdown: { baseFare: 1750, reservationCharge: 40, superfastCharge: 45, goodsServiceTax: 95, cateringCharge: 215, totalFare: 2145 } });
+  }
+  if ((m = path.match(/^\/trains\/(\w+)\/seats$/))) {
+    const day = (i) => new Date(Date.parse(params.get('journeyDate')) + i * 86400000).toISOString().slice(0, 10);
+    return ok({ trainNumber: m[1], classCode: params.get('classCode'), quotaCode: 'GN', calendar: [
+      { date: day(0), rawDate: day(0), status: 'AVAILABLE-0042', statusCode: 'AVAILABLE', isAvailable: true, availableSeats: 42 },
+      { date: day(1), rawDate: day(1), status: 'RAC 24/RAC 12', statusCode: 'RAC', isAvailable: false, waitlistNumber: 12 },
+      { date: day(2), rawDate: day(2), status: 'GNWL24/WL11', statusCode: 'WAITLIST', isAvailable: false, waitlistNumber: 11, waitlistType: 'GNWL' },
+    ] });
+  }
+  if ((m = path.match(/^\/trains\/(\w+)\/route$/))) {
+    const t = trains[m[1]] || trains[12002];
+    const [a, b] = [st(t.from), st(t.to)];
+    return ok({ trainNumber: m[1], format: 'coordinates', coordinates: Array.from({ length: 40 }, (_, i) => [
+      a.lat + ((b.lat - a.lat) * i) / 39 + Math.sin(i / 4) * 0.25, a.lng + ((b.lng - a.lng) * i) / 39 + Math.cos(i / 5) * 0.2]) });
+  }
+  if ((m = path.match(/^\/pnr\/(\d{10})$/))) {
+    if (m[1] !== '1234567890') return { status: 404, body: { success: false, error: { code: 'PNR_NOT_FOUND', message: 'PNR not found' } } };
+    return ok({
+      pnrNumber: m[1],
+      train: { number: '12952', name: 'MUMBAI RAJDHANI', source: st('NDLS'), destination: st('MMCT'), boardingPoint: st('NDLS'), reservationUpto: st('MMCT') },
+      journey: { date: '2026-11-20', class: '3A', quota: 'GN', bookingFare: '2145' },
+      charting: { isPrepared: false, status: 'Chart Not Prepared' },
+      passengers: [
+        { passengerNumber: 1, bookingStatus: 'WL/14/GN', currentStatus: 'CNF', coach: 'B4', berthNumber: 58, berthCode: 'LB', isConfirmed: true },
+        { passengerNumber: 2, bookingStatus: 'WL/15/GN', currentStatus: 'CNF', coach: 'B4', berthNumber: 59, berthCode: 'MB', isConfirmed: true },
+      ],
+    });
+  }
   return { status: 404, body: { success: false, error: { code: 'NOT_FOUND', message: 'No mock for this path' } } };
 }

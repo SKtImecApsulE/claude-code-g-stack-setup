@@ -198,7 +198,10 @@ function berthBays(type, total, blueprint) {
 
 const LEVEL = (type) => String(type || '').toUpperCase().replace(/[^A-Z]/g, '');
 
-export function buildBerthLayout(type, total, blueprint) {
+// mode 'night': every berth made up. mode 'day' (3-tier only): middle berths
+// folded down as backrests and passengers seated on the lower berths.
+export function buildBerthLayout(type, total, blueprint, mode = 'night') {
+  const day = mode === 'day' && type.tiers === 3;
   const bays = berthBays(type, total, blueprint);
   const seatLen = bays.length * BAY;
   const length = seatLen + 2 * CAR.vestibule;
@@ -234,8 +237,10 @@ export function buildBerthLayout(type, total, blueprint) {
         let level = LEVEL(b.type);
         if (!(level in heights)) level = order[Math.min(k, order.length - 1)];
         const y = heights[level];
-        const sitting = level === 'LB' && type.tiers === 2;
-        const eyeY = y + (sitting ? 0.7 : level === 'LB' ? 0.4 : 0.3);
+        const folded = day && level === 'MB';
+        const seated = (level === 'LB' && type.tiers === 2) || (day && level !== 'UB');
+        const eyeY = seated ? 1.15 : y + (level === 'LB' ? 0.4 : 0.3);
+        const eyeX = MAIN_X0 + (day && level === 'MB' ? 0.95 : 0.36);
         const seat = {
           id: String(b.number),
           num: b.number,
@@ -246,14 +251,16 @@ export function buildBerthLayout(type, total, blueprint) {
           berth: level,
           view: level === 'UB' ? 'none' : 'clear',
           nearDoor,
-          eye: [MAIN_X0 + 0.36, eyeY, z],
+          eye: [eyeX, eyeY, z + (seated ? dir * 0.08 : 0)],
           looks: {
-            window: [Math.PI / 2 + dir * 0.55, level === 'LB' && !sitting ? 0.1 : 0.02],
+            window: [Math.PI / 2 + dir * 0.55, level === 'LB' && !seated ? 0.1 : 0.02],
             across: [dir > 0 ? Math.PI : 0, -0.1],
             aisle: [-Math.PI / 2 - dir * 0.3, -0.08],
           },
         };
-        mainSlabs.push({ y, z, level });
+        mainSlabs.push(folded
+          ? { y: 0.82, z: zc - dir * (BAY / 2 - 0.075), level, folded, pillow: false }
+          : { y, z, level, pillow: !(day && level === 'LB') });
         seats.push(seat);
         benchSeats[bi].push(seat);
       });
@@ -280,7 +287,7 @@ export function buildBerthLayout(type, total, blueprint) {
           aisle: [Math.PI / 2 + 0.5, -0.1],
         },
       };
-      sideSlabs.push({ y, z: zc, level });
+      sideSlabs.push({ y, z: zc, level, pillow: !(day && level === 'SL') });
       seats.push(seat);
       return seat;
     });
@@ -294,6 +301,8 @@ export function buildBerthLayout(type, total, blueprint) {
   const aisleW = hasSide ? SIDE_X - 0.25 - MAIN_X1 : CAR.halfW - MAIN_X1;
   return {
     kind: 'berth',
+    mode: day ? 'day' : 'night',
+    canFold: type.tiers === 3,
     // berth coaches have lower windows, level with someone lying down
     winBottom: 0.72,
     winTop: 1.5,

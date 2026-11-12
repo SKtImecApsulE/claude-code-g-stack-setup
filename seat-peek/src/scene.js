@@ -374,6 +374,7 @@ export class SeatScene {
       mesh.receiveShadow = true;
       items.forEach((it, i) => {
         d.position.set(...place(it));
+        d.rotation.set(it.folded ? Math.PI / 2 : 0, 0, 0);
         d.updateMatrix();
         mesh.setMatrixAt(i, d.matrix);
         if (mat === vinyl) mesh.setColorAt(i, this.seatColor);
@@ -387,8 +388,8 @@ export class SeatScene {
       side: instanced(rbox(0.5, 0.09, L.bay - 0.12, 0.03), vinyl, L.sideSlabs, (b) => [L.sideX, b.y - 0.045, b.z]),
     };
     if (L.ac) {
-      instanced(rbox(0.36, 0.09, 0.3, 0.04), linen, L.mainSlabs, (b) => [x0 + 0.24, b.y + 0.04, b.z]);
-      instanced(rbox(0.3, 0.09, 0.36, 0.04), linen, L.sideSlabs, (b) => [L.sideX, b.y + 0.04, b.z - L.bay / 2 + 0.3]);
+      instanced(rbox(0.36, 0.09, 0.3, 0.04), linen, L.mainSlabs.filter((b) => b.pillow), (b) => [x0 + 0.24, b.y + 0.04, b.z]);
+      instanced(rbox(0.3, 0.09, 0.36, 0.04), linen, L.sideSlabs.filter((b) => b.pillow), (b) => [L.sideX, b.y + 0.04, b.z - L.bay / 2 + 0.3]);
     }
 
     // Bay partitions, with a small fold-down table under each window

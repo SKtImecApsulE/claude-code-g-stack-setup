@@ -36,11 +36,15 @@ No key yet? `RAIL_MOCK=1 npm run dev` serves a couple of stand-in trains
 | Coach order and class of each coach | Real (RailRadar rake composition) |
 | Seat and berth numbering, and which numbers are window / middle / aisle / lower / upper | From RailRadar's class blueprint when present, otherwise the standard pattern |
 | Which side the sun is on | Computed from the two stations and the departure time |
-| Seat availability, fares, booking | Not available; the Book button links to IRCTC |
+| Route map | Real track geometry (RailRadar), with your stretch highlighted |
+| Fare and 6-day availability per class | RailRadar, from third-party sources; needs a paid RailRadar plan (Developer or above) |
+| PNR lookup, jumping to the coach and berth on a ticket | RailRadar; needs a paid plan. PNR responses are never cached |
+| Booking | Not available; the Book button links to IRCTC |
 | Scenery outside the window | Generic, generated in code |
 
 Supported coach types: EC, CC, Vistadome and 2S (chair cars); 1A, 2A, 3A, 3E
-and Sleeper (berths, shown made up for the night).
+and Sleeper (berths). Three-tier coaches switch between a night setup (all
+berths made up) and a day setup (middle berths folded, passengers seated).
 
 ## Layout
 
@@ -50,6 +54,7 @@ and Sleeper (berths, shown made up for the night).
 | `src/api.js` | Browser client for the proxy |
 | `src/coaches.js` | Coach types and capacities |
 | `src/layout.js` | Seat and berth geometry shared by the map and the 3D scene; seat facts and score |
+| `src/route.js` | Polyline decoding and the SVG route map |
 | `src/sun.js` | Solar position, for the sunny side of the train |
 | `src/scene.js` | three.js coach interior, seats, berths, lighting, camera |
 | `src/world.js` | Sky, clouds, ground, fields, trees, hills scrolling past |
