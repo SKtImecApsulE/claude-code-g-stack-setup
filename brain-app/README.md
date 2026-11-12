@@ -37,5 +37,5 @@ Needs: [Bun](https://bun.sh), `gbrain` on PATH, and a Claude login (Claude Code)
 - **One process owns the brain.** PGLite allows a single holder. While this app runs it holds the database, so a Claude Code
   session's own `gbrain` MCP server will report `pglite_busy`. Use the app, or stop it first.
 - **Search is keyword-only** until you set an OpenAI or Voyage key and re-init with an embedding model (see `CLAUDE.md`).
-- **Getting notes in:** stop the app, run `gbrain import <folder-of-markdown>`, restart. Or tell the agent to save pages.
+- **Getting notes in:** `./scripts/import-notes.sh --stop-app <folder-of-markdown>` (stops the app, imports, restarts it). Or tell the agent to save pages.
 - The brain lives in `~/.gbrain` on the machine running the app. Cloud containers are ephemeral, so run this on your own computer.
