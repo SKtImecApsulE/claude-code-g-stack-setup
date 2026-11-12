@@ -26,32 +26,53 @@ function send(res, status, body, cache = 0) {
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
 }
 
-export default async function handler(req, res) {
-  if (req.method !== 'GET') return send(res, 405, { success: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'GET only' } });
-  const url = new URL(req.url, 'http://localhost');
+// Coach responses repeat the whole rake for every stop (up to ~1 MB); the app
+// only needs the rake and the class blueprints.
+function slim(path, text) {
+  if (!path.endsWith('/coaches')) return text;
+  try {
+    const body = JSON.parse(text);
+    if (body?.data) {
+      delete body.data.stationVariations;
+      delete body.data.legs;
+    }
+    return JSON.stringify(body);
+  } catch {
+    return text;
+  }
+}
+
+// Validate a request to our proxy and fetch it upstream.
+// Returns { status, body, cache } where body is a JSON string.
+export async function railRequest(reqUrl) {
+  const fail = (status, code, message) => ({ status, cache: 0, body: JSON.stringify({ success: false, error: { code, message } }) });
+  const url = new URL(reqUrl, 'http://localhost');
   const path = url.searchParams.get('p') || '';
   const rule = ALLOWED.find(([re]) => re.test(path));
-  if (!rule) return send(res, 400, { success: false, error: { code: 'BAD_PATH', message: 'Unsupported path' } });
+  if (!rule) return fail(400, 'BAD_PATH', 'Unsupported path');
 
   const upstream = new URL(BASE + path);
   for (const name of PARAMS) {
     const v = url.searchParams.get(name);
     if (v !== null && v.length <= 100) upstream.searchParams.set(name, v);
   }
-
   const key = process.env.RAILRADAR_API_KEY;
-  if (!key && process.env.VERCEL) {
-    return send(res, 500, { success: false, error: { code: 'NO_KEY', message: 'RAILRADAR_API_KEY is not set on the server' } });
-  }
+  if (!key && process.env.VERCEL) return fail(500, 'NO_KEY', 'RAILRADAR_API_KEY is not set on the server');
   try {
     const r = await fetch(upstream, {
       // Without a key (local sandboxes that inject one at the network layer) send a placeholder.
       headers: { Authorization: `Bearer ${key || 'proxy-injected'}`, Accept: 'application/json' },
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(25000),
     });
     const text = await r.text();
-    send(res, r.status, text, r.ok ? rule[1] : 0);
-  } catch (err) {
-    send(res, 502, { success: false, error: { code: 'UPSTREAM_ERROR', message: 'Could not reach the train data service' } });
+    return { status: r.status, cache: r.ok ? rule[1] : 0, body: r.ok ? slim(path, text) : text, key: upstream.pathname + upstream.search };
+  } catch {
+    return fail(502, 'UPSTREAM_ERROR', 'Could not reach the train data service');
   }
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return send(res, 405, { success: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'GET only' } });
+  const out = await railRequest(req.url);
+  send(res, out.status, out.body, out.cache);
 }

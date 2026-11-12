@@ -279,7 +279,8 @@ function describeJourney(comp, sched) {
     const minutes = t.minutes ?? minutesBetween(fromStop, toStop);
     // timetable times are IST (UTC+5:30)
     const departUtc = new Date(`${t.date}T${dep}:00+05:30`);
-    const sun = journeySun(fromStop.station, toStop.station, departUtc, minutes);
+    // One mid-journey sample says little about a trip longer than about 14 hours.
+    const sun = minutes <= 840 ? journeySun(fromStop.station, toStop.station, departUtc, minutes) : null;
     if (sun) {
       t.sun = sun;
       t.light = sun.light;
@@ -314,7 +315,7 @@ function openCoach(i) {
   const coach = state.coaches[i];
   const blueprint = state.blueprints[coach.classType] || state.blueprints[coach.category.toUpperCase()];
   state.layout = coach.type.kind === 'chair'
-    ? buildChairLayout(coach.type, coach.total)
+    ? buildChairLayout(coach.type, coach.total, blueprint)
     : buildBerthLayout(coach.type, coach.total, blueprint);
   scene.setCoach(state.layout, coach.type, coach.code);
   $('coaches').innerHTML = state.coaches

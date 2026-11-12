@@ -245,3 +245,7 @@ a.book { display: block; text-align: center; text-decoration: none; }
 .seat.berth { width: 44px; }
 .rn:empty { width: 16px; }
 .coach-body .row { justify-content: center; }
+
+.bar-title strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.train-head strong { min-width: 0; }
+.train-head { gap: 10px; }

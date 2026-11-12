@@ -27,11 +27,34 @@ const nearest = (target, current) =>
 
 // ---------- chair cars ----------
 
-export function buildChairLayout(type, total) {
+// Seat numbers per row: left block window-to-aisle, right block aisle-to-window.
+// Prefer the API's blueprint (real numbering); otherwise number row by row.
+function chairRows(type, total, blueprint) {
+  const fromApi = (blueprint?.cabins || [])
+    .map((c) => ({
+      left: (c.main || []).filter((x) => Number.isFinite(x.number)),
+      right: (c.side || []).filter((x) => Number.isFinite(x.number)),
+    }))
+    .filter((r) => r.left.length + r.right.length > 0);
+  if (fromApi.length) return fromApi;
   const [a, b] = type.layout;
+  const rows = [];
+  for (let n = 1; n <= total; n += a + b) {
+    const nums = Array.from({ length: a + b }, (_, i) => n + i).filter((x) => x <= total);
+    rows.push({ left: nums.slice(0, a).map((number) => ({ number })), right: nums.slice(a).map((number) => ({ number })) });
+  }
+  return rows;
+}
+
+const API_SEAT_KIND = { WS: 'window', MS: 'middle', AS: 'aisle' };
+
+export function buildChairLayout(type, total, blueprint) {
+  const rowDefs = chairRows(type, total, blueprint);
+  const a = Math.max(1, ...rowDefs.map((r) => r.left.length));
+  const b = Math.max(1, ...rowDefs.map((r) => r.right.length));
   const cols = a + b;
   const { pitch } = type;
-  const rows = Math.ceil(total / cols);
+  const rows = rowDefs.length;
   const half = Math.ceil(rows / 2);
   const seatLen = rows * pitch + CAR.tableGap;
   const length = seatLen + 2 * CAR.vestibule;
@@ -72,13 +95,18 @@ export function buildChairLayout(type, total) {
     const nearDoor = r < 2 || r >= rows - 2;
     const rowSeats = [];
 
-    for (let c = 0; c < cols; c++) {
-      const num = r * cols + c + 1;
-      if (num > total) continue;
+    const placed = [
+      ...rowDefs[r].left.map((d, k) => ({ d, c: k })),
+      ...rowDefs[r].right.map((d, k) => ({ d, c: a + k })),
+    ];
+    for (const { d, c } of placed) {
+      const num = d.number;
       const x = colX(c);
-      const atWindow = c === 0 || c === cols - 1;
-      const atAisle = c === a - 1 || c === a;
-      const kind = atWindow && atAisle ? 'solo' : atWindow ? 'window' : atAisle ? 'aisle' : 'middle';
+      const edge = c === 0 || c === cols - 1;
+      const byAisle = c === a - 1 || c === a;
+      const guessed = edge && byAisle ? 'solo' : edge ? 'window' : byAisle ? 'aisle' : 'middle';
+      const kind = API_SEAT_KIND[String(d.type || '').toUpperCase()] || guessed;
+      const atWindow = kind === 'window' || kind === 'solo';
       const ahead = facing < 0 ? 0 : Math.PI;
       const sideYaw = x < 0 ? Math.PI / 2 : -Math.PI / 2;
       const toward = Math.sign(nearest(ahead, sideYaw) - sideYaw) || 1;
@@ -195,7 +223,8 @@ export function buildBerthLayout(type, total, blueprint) {
     const nearDoor = i === 0 || i === bays.length - 1;
 
     // Split the main berths into the two facing benches of the bay.
-    const perBench = Math.ceil(bay.main.length / 2);
+    // a two-berth coupe has both berths on the same side
+    const perBench = bay.main.length <= 2 ? bay.main.length : Math.ceil(bay.main.length / 2);
     const benches = [bay.main.slice(0, perBench), bay.main.slice(perBench)];
     const benchSeats = [[], []];
     benches.forEach((bench, bi) => {

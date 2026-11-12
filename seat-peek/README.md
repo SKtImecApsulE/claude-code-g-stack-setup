@@ -15,6 +15,9 @@ npm install
 RAILRADAR_API_KEY=your-key npm run dev
 ```
 
+On a small quota (the free plan is 100 requests a month), add
+`RAIL_CACHE_DIR=.rail-cache` to keep successful responses on disk in dev.
+
 No key yet? `RAIL_MOCK=1 npm run dev` serves a couple of stand-in trains
 (12002 and 12952) from `dev/mock.js` so you can work on the app.
 
@@ -31,8 +34,7 @@ No key yet? `RAIL_MOCK=1 npm run dev` serves a couple of stand-in trains
 | --- | --- |
 | Trains between stations, times, run days | Real (RailRadar) |
 | Coach order and class of each coach | Real (RailRadar rake composition) |
-| Berth numbering per bay | From RailRadar's class blueprint when present, otherwise the standard pattern |
-| Seat position in chair cars (window / aisle / middle) | Standard layout for the coach type; individual coaches can differ |
+| Seat and berth numbering, and which numbers are window / middle / aisle / lower / upper | From RailRadar's class blueprint when present, otherwise the standard pattern |
 | Which side the sun is on | Computed from the two stations and the departure time |
 | Seat availability, fares, booking | Not available; the Book button links to IRCTC |
 | Scenery outside the window | Generic, generated in code |
