@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0e1320" />
+    <meta name="description" content="See the view from your Indian Railways seat or berth in 3D before you travel." />
+    <title>SeatPeek - see your train seat before you book</title>
+  </head>
+  <body>
+    <main id="home" class="home"></main>
+
+    <main id="booking" class="booking" hidden>
+      <header class="bar">
+        <button id="back" class="icon-btn" aria-label="Back to search">&#8592;</button>
+        <div class="bar-title">
+          <strong id="trainName"></strong>
+          <span id="trainMeta"></span>
+        </div>
+      </header>
+      <nav id="coaches" class="coaches" aria-label="Coaches"></nav>
+
+      <section class="stage" id="stage">
+        <canvas id="view" aria-label="3D view from the seat"></canvas>
+        <div class="stage-top">
+          <span id="viewLabel" class="badge"></span>
+          <span class="spacer"></span>
+          <button id="modeBtn" class="pill" aria-label="Switch berths between day and night setup" hidden></button>
+          <button id="mapBtn" class="pill" aria-label="Show the route map">Route</button>
+          <button id="timeBtn" class="pill" aria-label="Change time of day"></button>
+          <button id="expandBtn" class="pill" aria-label="Toggle full screen view">&#x26F6;</button>
+        </div>
+        <p id="hint" class="hint">Drag to look around</p>
+        <div class="stage-bottom" id="lookBtns"></div>
+        <div id="routeMap" class="route-map" hidden></div>
+        <div id="stageMsg" class="stage-msg" hidden></div>
+      </section>
+
+      <section class="panel">
+        <div id="map" class="map"></div>
+        <div id="seatCard" class="seat-card"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
