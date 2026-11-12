@@ -1,47 +1,56 @@
 # SeatPeek
 
-See your train seat before you book it. Pick a train and a coach, tap a seat on
-the map, and you are put in that seat in 3D: look out the window, down the aisle
-or straight ahead while the countryside rolls past.
+See your Indian Railways seat or berth before you travel. Search real trains
+between two stations (or enter a train number), pick a coach from the train's
+real rake, tap a seat or berth number, and look around from it in 3D.
+
+Train, timetable and coach data come from the [RailRadar API](https://railradar.in/docs).
+SeatPeek is not affiliated with Indian Railways or IRCTC.
+
+## Run it
 
 ```bash
 cd seat-peek
 npm install
-npm run dev
+RAILRADAR_API_KEY=your-key npm run dev
 ```
 
-Then open the printed URL (works on a phone on the same network too).
-`npm run build` writes a static site to `dist/`.
+No key yet? `RAIL_MOCK=1 npm run dev` serves a couple of stand-in trains
+(12002 and 12952) from `dev/mock.js` so you can work on the app.
 
-## What it shows
+## Deploy to Vercel
 
-- **Seat map** for three coach classes (1+2, 2+2 and 3+2 seating), with free and
-  taken seats and a strip along each wall showing glass, part-glass or pillar.
-- **3D view from the seat**: drag to look around, scroll to zoom, or use the
-  Window / Ahead / Aisle / Coach buttons. Day, sunset and night lighting.
-- **Seat facts and a score out of 10**: window, aisle or middle; whether a
-  pillar blocks the window; facing forward or backward; table; sunny or shady
-  side; near the door.
+1. Import the repository in Vercel and set **Root Directory** to `seat-peek`.
+2. Add the environment variable `RAILRADAR_API_KEY`.
+3. Deploy. `vercel.json` builds the Vite site and `api/rail.js` becomes a
+   serverless function, so the key stays on the server.
 
-The scene is built in code with no image or model files: textured fabric and
-floors, sunlight and shadows through the windows, a physical sky, and scenery
-that scrolls past at about 130 km/h.
+## What is real and what is modelled
 
-Windows are spaced on their own rhythm rather than the seat pitch, so some
-"window" seats really do sit beside a pillar, and the 3D view shows it.
+| | |
+| --- | --- |
+| Trains between stations, times, run days | Real (RailRadar) |
+| Coach order and class of each coach | Real (RailRadar rake composition) |
+| Berth numbering per bay | From RailRadar's class blueprint when present, otherwise the standard pattern |
+| Seat position in chair cars (window / aisle / middle) | Standard layout for the coach type; individual coaches can differ |
+| Which side the sun is on | Computed from the two stations and the departure time |
+| Seat availability, fares, booking | Not available; the Book button links to IRCTC |
+| Scenery outside the window | Generic, generated in code |
 
-## Sample data
-
-Trains, times, fares and seat availability are invented (`src/data.js`). The
-Book button only shows a confirmation; nothing is booked or charged.
+Supported coach types: EC, CC, Vistadome and 2S (chair cars); 1A, 2A, 3A, 3E
+and Sleeper (berths, shown made up for the night).
 
 ## Layout
 
 | File | Purpose |
 | --- | --- |
-| `src/data.js` | Sample trains, coach classes, fares, taken-seat pattern |
-| `src/layout.js` | Coach geometry shared by the map and the 3D scene; seat scoring |
-| `src/scene.js` | three.js coach interior, seats, lighting, camera |
+| `api/rail.js` | Server-side proxy to RailRadar with an allow-list of endpoints |
+| `src/api.js` | Browser client for the proxy |
+| `src/coaches.js` | Coach types and capacities |
+| `src/layout.js` | Seat and berth geometry shared by the map and the 3D scene; seat facts and score |
+| `src/sun.js` | Solar position, for the sunny side of the train |
+| `src/scene.js` | three.js coach interior, seats, berths, lighting, camera |
 | `src/world.js` | Sky, clouds, ground, fields, trees, hills scrolling past |
-| `src/textures.js` | Procedural canvas textures (fabric, floor, grass, display) |
-| `src/main.js`, `src/style.css` | Screens and interaction |
+| `src/textures.js` | Procedural canvas textures |
+| `src/main.js`, `src/style.css` | Search, train view and interaction |
+| `dev/mock.js` | Stand-in API responses for development |

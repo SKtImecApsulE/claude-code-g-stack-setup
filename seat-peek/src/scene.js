@@ -24,7 +24,6 @@ const PRESETS = {
   },
 };
 
-const EYE_Y = 1.24;
 const SPEED = 36; // m/s, about 130 km/h
 const WALL_TOP = 1.95; // where the side wall meets the curved ceiling
 const CEIL_RISE = 0.36;
@@ -135,7 +134,8 @@ export class SeatScene {
 
   buildCar(L, cls, label) {
     const g = new THREE.Group();
-    const { halfW, winBottom, winTop } = CAR;
+    const { halfW } = CAR;
+    const { winBottom, winTop } = L;
     const len = L.length;
     const std = (o) => new THREE.MeshStandardMaterial(o);
     const add = (geo, mat, x = 0, y = 0, z = 0, shadow = 'both') => {
@@ -163,8 +163,7 @@ export class SeatScene {
     });
     this.panelMat = std({ color: 0xffffff, emissive: 0xfff4de, emissiveIntensity: 1 });
 
-    const aisleX = (L.seats[L.a - 1].x + L.seats[L.a].x) / 2;
-    const aisleW = L.seats[L.a].x - L.seats[L.a - 1].x - L.seatW;
+    const { aisleX, aisleW } = L;
 
     // Floor
     add(bx(halfW * 2, 0.1, len), floorMat, 0, -0.05, 0, 'receive');
@@ -211,7 +210,7 @@ export class SeatScene {
       depth: 0.035, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2, curveSegments: 8,
     });
     const blindMat = std({ color: 0xcfc6b4, roughness: 0.9, side: THREE.DoubleSide });
-    const rand = rng(L.rows * 31 + L.cols);
+    const rand = rng(L.seats.length * 31 + 7);
     const midY = (winBottom + winTop) / 2;
 
     for (const sx of [-1, 1]) {
@@ -273,18 +272,15 @@ export class SeatScene {
       }
     }
 
-    // Tables between the two facing halves
-    const tableZ = (L.rowInfo[L.half - 1].z + L.rowInfo[L.half].z) / 2;
-    const tableMat = std({ color: 0xd9d4c8, roughness: 0.4 });
-    const blocks = [
-      [L.seats[0].x - L.seatW / 2, L.seats[L.a - 1].x + L.seatW / 2],
-      [L.seats[L.a].x - L.seatW / 2, L.seats[L.cols - 1].x + L.seatW / 2],
-    ];
-    for (const [x0, x1] of blocks) {
-      const cx = (x0 + x1) / 2;
-      add(rbox(x1 - x0 - 0.04, 0.03, 0.5, 0.012), tableMat, cx, 0.73, tableZ);
-      add(bx(x1 - x0 - 0.02, 0.012, 0.52), darkMat, cx, 0.716, tableZ);
-      add(new THREE.CylinderGeometry(0.035, 0.05, 0.71, 12), metalMat, cx, 0.355, tableZ);
+    // Tables between the two facing halves of a chair car
+    if (L.kind === 'chair') {
+      const tableMat = std({ color: 0xd9d4c8, roughness: 0.4 });
+      for (const [x0, x1] of L.blocks) {
+        const cx = (x0 + x1) / 2;
+        add(rbox(x1 - x0 - 0.04, 0.03, 0.5, 0.012), tableMat, cx, 0.73, L.tableZ);
+        add(bx(x1 - x0 - 0.02, 0.012, 0.52), darkMat, cx, 0.716, L.tableZ);
+        add(new THREE.CylinderGeometry(0.035, 0.05, 0.71, 12), metalMat, cx, 0.355, L.tableZ);
+      }
     }
 
     // Warm ceiling lamps down the aisle
@@ -297,7 +293,8 @@ export class SeatScene {
       this.lamps.push(lamp);
     }
 
-    this.buildSeats(g, L);
+    if (L.kind === 'chair') this.buildSeats(g, L);
+    else this.buildBerths(g, L, { add, trimMat, darkMat, metalMat, wallMat });
     return g;
   }
 
@@ -361,16 +358,74 @@ export class SeatScene {
     }
   }
 
+  // Sleeper and AC coaches: bays of berths across the coach, side berths along the wall.
+  buildBerths(g, L, { add, trimMat, darkMat, metalMat, wallMat }) {
+    const [x0, x1] = L.mainX;
+    const mainLen = x1 - x0 - 0.04;
+    const mainX = (x0 + x1) / 2;
+    const vinyl = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.62 });
+    const linen = new THREE.MeshStandardMaterial({ color: 0xf3f1ea, roughness: 0.9 });
+    const d = new THREE.Object3D();
+    const instanced = (geo, mat, items, place) => {
+      const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, items.length));
+      mesh.count = items.length;
+      mesh.frustumCulled = false;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      items.forEach((it, i) => {
+        d.position.set(...place(it));
+        d.updateMatrix();
+        mesh.setMatrixAt(i, d.matrix);
+        if (mat === vinyl) mesh.setColorAt(i, this.seatColor);
+      });
+      g.add(mesh);
+      return mesh;
+    };
+
+    this.seatMeshes = {
+      main: instanced(rbox(mainLen, 0.09, 0.6, 0.03), vinyl, L.mainSlabs, (b) => [mainX, b.y - 0.045, b.z]),
+      side: instanced(rbox(0.5, 0.09, L.bay - 0.12, 0.03), vinyl, L.sideSlabs, (b) => [L.sideX, b.y - 0.045, b.z]),
+    };
+    if (L.ac) {
+      instanced(rbox(0.36, 0.09, 0.3, 0.04), linen, L.mainSlabs, (b) => [x0 + 0.24, b.y + 0.04, b.z]);
+      instanced(rbox(0.3, 0.09, 0.36, 0.04), linen, L.sideSlabs, (b) => [L.sideX, b.y + 0.04, b.z - L.bay / 2 + 0.3]);
+    }
+
+    // Bay partitions, with a small fold-down table under each window
+    const partMat = new THREE.MeshStandardMaterial({ color: 0xe6dfd0, roughness: 0.7 });
+    for (const z of L.partitions) {
+      add(bx(mainLen + 0.04, 1.95, 0.04), partMat, mainX, 0.975, z);
+      if (L.hasSide) {
+        add(bx(0.5, 0.42, 0.03), partMat, L.sideX, 0.68, z);
+        add(bx(0.5, 0.3, 0.03), partMat, L.sideX, 1.68, z);
+      }
+    }
+    for (let i = 0; i < L.partitions.length - 1; i++) {
+      const zc = (L.partitions[i] + L.partitions[i + 1]) / 2;
+      add(rbox(0.3, 0.025, 0.42, 0.01), trimMat, x0 + 0.17, 0.74, zc);
+      // ladder rungs up to the upper berths
+      for (const y of [0.75, 1.25]) add(bx(0.03, 0.03, 0.26), metalMat, x1 - 0.02, y, L.partitions[i] + 0.2, 'none');
+      if (!L.hasSide) {
+        // first class: a corridor wall with a doorway closes each cabin
+        const solid = (L.bay - 0.75) / 2;
+        for (const dz of [-1, 1]) {
+          add(bx(0.04, 1.95, solid), wallMat, x1 + 0.02, 0.975, zc + dz * (0.375 + solid / 2));
+        }
+        add(bx(0.05, 0.12, 0.75), darkMat, x1 + 0.02, 1.9, zc);
+      }
+    }
+  }
+
   paintSeat(seat, color) {
-    const mesh = this.seatMeshes.fabric;
-    mesh.setColorAt(seat.index, color);
+    const mesh = this.seatMeshes[seat.mesh];
+    mesh.setColorAt(seat.inst, color);
     mesh.instanceColor.needsUpdate = true;
   }
 
   // ---------- camera ----------
 
   seatEye(s) {
-    return this.tpos.set(s.x, EYE_Y, s.z - s.facing * 0.07);
+    return this.tpos.set(...s.eye);
   }
 
   setSeat(seat) {
@@ -381,7 +436,12 @@ export class SeatScene {
     this.mode = 'seat';
     this.zoom = 1;
     this.seatEye(seat);
-    this.look('window');
+    this.look(Object.keys(seat.looks)[0]);
+  }
+
+  // Berth coaches fill the middle of the car, so stand in the aisle instead.
+  overviewX() {
+    return this.layout.kind === 'berth' ? this.layout.aisleX : 0;
   }
 
   showOverview(snap = false) {
@@ -390,7 +450,7 @@ export class SeatScene {
     this.tyaw = nearestAngle(0, this.yaw);
     this.tpitch = -0.36;
     if (snap) {
-      this.pos.set(0, 1.86, this.layout.length / 2 - 1.5);
+      this.pos.set(this.overviewX(), 1.86, this.layout.length / 2 - 1.5);
       this.yaw = this.tyaw = 0;
       this.pitch = this.tpitch;
     }
@@ -403,17 +463,7 @@ export class SeatScene {
       this.mode = 'seat';
       this.seatEye(s);
     }
-    const ahead = s.facing < 0 ? 0 : Math.PI;
-    const windowSide = s.side === 'L' ? Math.PI / 2 : -Math.PI / 2;
-    let yaw = ahead;
-    let pitch = -0.08;
-    if (where === 'window' || where === 'aisle') {
-      const sideYaw = where === 'window' ? windowSide : -windowSide;
-      // turn most of the way, keeping a little of the direction you face
-      const toward = Math.sign(nearestAngle(ahead, sideYaw) - sideYaw) || 1;
-      yaw = sideYaw + toward * 0.5;
-      pitch = where === 'window' ? 0.0 : -0.14;
-    }
+    const [yaw, pitch] = s.looks[where] || Object.values(s.looks)[0];
     this.tyaw = nearestAngle(yaw, this.yaw);
     this.tpitch = pitch;
   }
@@ -493,7 +543,7 @@ export class SeatScene {
 
     if (this.mode === 'overview' && this.layout) {
       const drift = (0.5 + 0.5 * Math.sin(this.time * 0.25)) * 1.6;
-      this.tpos.set(0, 1.86, this.layout.length / 2 - 1.5 - drift);
+      this.tpos.set(this.overviewX(), 1.86, this.layout.length / 2 - 1.5 - drift);
     }
     const k = 1 - Math.exp(-dt * 4.5);
     this.pos.lerp(this.tpos, k);
