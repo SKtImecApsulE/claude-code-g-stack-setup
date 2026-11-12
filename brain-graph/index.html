@@ -1,0 +1,200 @@
+<title>Brain Graph</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400&display=swap">
+<style>
+/* Layout: full-height canvas graph (Obsidian-style) with a slim detail panel; stacks on phones. Single dark look by choice. */
+:root {
+  --bg: #1a1b22;
+  --panel: #20212a;
+  --line: #34353f;
+  --fg: #dcddde;
+  --muted: #8b8d98;
+  --node: #7b7e8c;
+  --hit: #a78bfa;
+  --hit-glow: rgba(167,139,250,.55);
+  --ask: #f4f0ff;
+  --font: "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--font); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); box-sizing: border-box; }
+main { height: 100%; display: flex; flex-direction: column; gap: 12px; padding-block: 12px; box-sizing: border-box; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; }
+header h1 { font-size: 15px; font-weight: 500; margin: 0; color: var(--hit); letter-spacing: .02em; }
+header p { margin: 0; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+header p b { color: var(--fg); font-weight: 500; }
+.stage { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 280px; gap: 12px; }
+.canvas-wrap { position: relative; min-height: 320px; min-width: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: radial-gradient(ellipse at 50% 45%, #23242e 0%, var(--bg) 70%); }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+canvas.drag { cursor: grabbing; }
+.legend { position: absolute; left: 10px; bottom: 8px; display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; pointer-events: none; }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+aside { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 14px; overflow: auto; min-width: 0; }
+aside h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 500; margin: 0 0 8px; }
+aside .slug { font-family: var(--mono); font-size: 12px; color: var(--hit); overflow-wrap: anywhere; }
+aside .title { margin: 4px 0 8px; font-weight: 500; }
+aside .snip { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; white-space: pre-wrap; }
+@media (max-width: 720px) { .stage { grid-template-columns: 1fr; grid-template-rows: minmax(340px, 1fr) auto; } }
+</style>
+
+<main>
+  <header>
+    <h1>Brain Graph</h1>
+    <p id="ask"></p>
+  </header>
+  <div class="stage">
+    <div class="canvas-wrap">
+      <canvas id="c" aria-label="Force-directed graph of brain pages. Hover or tap a node for details."></canvas>
+      <div class="legend">
+        <span><i style="background:var(--ask)"></i>question</span>
+        <span><i style="background:var(--hit)"></i>used in answer</span>
+        <span><i style="background:var(--node)"></i>other pages</span>
+      </div>
+    </div>
+    <aside id="panel"><h2>Selected</h2><div class="snip">Hover or tap a node.</div></aside>
+  </div>
+</main>
+
+<!-- DATA: replaced on every question. nodes: id, label, type, hit (used in answer), snippet. edges: s, t, kind ("hit" = question to used page, "link" = page to page). -->
+<script id="data" type="application/json">
+{
+  "question": "How does the assistant decide what it can do without asking, and how do I undo it?",
+  "nodes": [
+    {"id": "docs/design", "label": "docs/design", "type": "note", "hit": true, "snippet": "Design: Personal Assistant, a chat-first automation agent that earns your trust. Status: APPROVED. Approach B: OpenClaw runtime + custom trust-layer plugin."},
+    {"id": "changelog", "label": "changelog", "type": "note", "hit": true, "snippet": "v0.1.0.0 (2026-07-05): first shipped version of the Personal Assistant, built on OpenClaw with a custom trust-layer plugin."},
+    {"id": "sec:tier-gate", "label": "v1 scope: tier gate", "type": "section", "hit": true, "snippet": "Tier gate is OpenClaw's before_tool_call hook returning requireApproval. Decision is auto / draft-and-confirm / always-escalate, keyed by deterministically classified task type. Hook errors fail closed (escalate). Stale approvals are re-validated and expire after 24h."},
+    {"id": "sec:undo", "label": "What makes this cool", "type": "section", "hit": true, "snippet": "One-word undo: every action lands in a ledger with an inverse action recorded, so 'undo' in chat rolls back the last action(s). Promotion with receipts: the agent tracks its own per-task record and pitches for more autonomy with evidence."},
+    {"id": "sec:trust-layer", "label": "v0.1.0.0 trust layer", "type": "section", "hit": true, "snippet": "Deterministic classifier (unknown escalates); append-only SQLite ledger; undo is LIFO, precondition-checked, halts at irreversible entries; promotion pitch at 10 approvals; trust_revoke never needs approval; $2 warn / $5 throttle daily budget."},
+    {"id": "setup-gbrain-smoke-test-1794221407", "label": "setup-gbrain-smoke-test", "type": "concept", "hit": false, "snippet": "Set up on Mon Nov 9 10:50:07 UTC 2026. Smoke test for /setup-gbrain. (not used in this answer)"}
+  ],
+  "edges": [
+    {"s": "__q", "t": "docs/design", "kind": "hit"},
+    {"s": "__q", "t": "changelog", "kind": "hit"},
+    {"s": "docs/design", "t": "sec:tier-gate", "kind": "link"},
+    {"s": "docs/design", "t": "sec:undo", "kind": "link"},
+    {"s": "changelog", "t": "sec:trust-layer", "kind": "link"}
+  ]
+}
+</script>
+
+<script>
+(function () {
+  var data = JSON.parse(document.getElementById('data').textContent);
+  document.getElementById('ask').innerHTML = 'Q: <b></b>';
+  document.querySelector('#ask b').textContent = data.question;
+
+  var css = getComputedStyle(document.documentElement);
+  function v(n) { return css.getPropertyValue(n).trim(); }
+  var C = { node: v('--node'), hit: v('--hit'), glow: v('--hit-glow'), ask: v('--ask'), line: v('--line'), fg: v('--fg'), muted: v('--muted') };
+
+  var nodes = [{ id: '__q', label: data.question, type: 'question', q: true, snippet: 'Your question.' }]
+    .concat(data.nodes.map(function (n) { return Object.assign({}, n); }));
+  var byId = {}; nodes.forEach(function (n) { byId[n.id] = n; });
+  var edges = data.edges.filter(function (e) { return byId[e.s] && byId[e.t]; })
+    .map(function (e) { return { a: byId[e.s], b: byId[e.t], kind: e.kind }; });
+  var deg = {}; edges.forEach(function (e) { deg[e.a.id] = (deg[e.a.id] || 0) + 1; deg[e.b.id] = (deg[e.b.id] || 0) + 1; });
+  nodes.forEach(function (n, i) {
+    var ang = i * 2.4, r = 40 + i * 18;
+    n.x = Math.cos(ang) * r; n.y = Math.sin(ang) * r; n.vx = 0; n.vy = 0;
+    n.r = n.q ? 9 : 5 + Math.min(6, (deg[n.id] || 0) * 1.5);
+  });
+
+  var cv = document.getElementById('c'), ctx = cv.getContext('2d'), W = 0, H = 0, dpr = 1;
+  var cam = { x: 0, y: 0, k: 1 }, hover = null, drag = null, sel = null, alpha = 1, t0 = performance.now();
+  var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function resize() {
+    var b = cv.getBoundingClientRect(); dpr = window.devicePixelRatio || 1;
+    W = b.width; H = b.height; cv.width = W * dpr; cv.height = H * dpr;
+  }
+  window.addEventListener('resize', function () { resize(); alpha = Math.max(alpha, .3); });
+  resize();
+
+  function tick() {
+    var i, j, a, b, dx, dy, d2, d, f;
+    for (i = 0; i < nodes.length; i++) for (j = i + 1; j < nodes.length; j++) {
+      a = nodes[i]; b = nodes[j]; dx = b.x - a.x; dy = b.y - a.y; d2 = dx * dx + dy * dy + 40; d = Math.sqrt(d2);
+      f = 2600 / d2 * alpha; dx /= d; dy /= d;
+      a.vx -= dx * f; a.vy -= dy * f; b.vx += dx * f; b.vy += dy * f;
+    }
+    edges.forEach(function (e) {
+      dx = e.b.x - e.a.x; dy = e.b.y - e.a.y; d = Math.sqrt(dx * dx + dy * dy) || 1;
+      f = (d - 110) * .02 * alpha; dx /= d; dy /= d;
+      e.a.vx += dx * f; e.a.vy += dy * f; e.b.vx -= dx * f; e.b.vy -= dy * f;
+    });
+    nodes.forEach(function (n) {
+      n.vx -= n.x * .004 * alpha; n.vy -= n.y * .004 * alpha;
+      if (n === drag) { n.vx = n.vy = 0; return; }
+      n.vx *= .82; n.vy *= .82; n.x += n.vx; n.y += n.vy;
+    });
+    alpha *= .985; if (alpha < .02) alpha = .02;
+  }
+
+  function neighbors(n) { var s = {}; s[n.id] = 1; edges.forEach(function (e) { if (e.a === n) s[e.b.id] = 1; if (e.b === n) s[e.a.id] = 1; }); return s; }
+
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    ctx.translate(W / 2 + cam.x, H / 2 + cam.y); ctx.scale(cam.k, cam.k);
+    var focus = hover || sel, near = focus ? neighbors(focus) : null;
+    var pulse = reduce ? 0 : (Math.sin((performance.now() - t0) / 700) + 1) / 2;
+    edges.forEach(function (e) {
+      var on = !near || (near[e.a.id] && near[e.b.id]);
+      ctx.beginPath(); ctx.moveTo(e.a.x, e.a.y); ctx.lineTo(e.b.x, e.b.y);
+      ctx.strokeStyle = e.kind === 'hit' ? C.hit : C.line; ctx.lineWidth = (e.kind === 'hit' ? 1.4 : 1) / cam.k;
+      ctx.globalAlpha = on ? (e.kind === 'hit' ? .75 : .9) : .12; ctx.stroke();
+    });
+    nodes.forEach(function (n) {
+      var on = !near || near[n.id], col = n.q ? C.ask : (n.hit ? C.hit : C.node);
+      ctx.globalAlpha = on ? 1 : .18;
+      if (n.q || n.hit) { ctx.shadowColor = n.q ? 'rgba(244,240,255,.6)' : C.glow; ctx.shadowBlur = 14 + pulse * 8; }
+      ctx.beginPath(); ctx.arc(n.x, n.y, n.r + (n === focus ? 2 : 0), 0, 6.2832); ctx.fillStyle = col; ctx.fill();
+      ctx.shadowBlur = 0;
+      if (n.q) { ctx.lineWidth = 1.5 / cam.k; ctx.strokeStyle = C.hit; ctx.stroke(); }
+    });
+    ctx.font = '12px ' + v('--font'); ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    nodes.forEach(function (n) {
+      var on = !near || near[n.id]; ctx.globalAlpha = on ? (n.hit || n.q || n === focus ? 1 : .7) : .15;
+      ctx.fillStyle = n.q ? C.ask : (n.hit ? C.fg : C.muted);
+      var t = n.label.length > 34 ? n.label.slice(0, 33) + '…' : n.label;
+      ctx.fillText(t, n.x, n.y + n.r + 5);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  function loop() { tick(); draw(); requestAnimationFrame(loop); }
+  loop();
+
+  function world(ev) { var b = cv.getBoundingClientRect(); return { x: (ev.clientX - b.left - W / 2 - cam.x) / cam.k, y: (ev.clientY - b.top - H / 2 - cam.y) / cam.k }; }
+  function pick(p) { var best = null, bd = 1e9; nodes.forEach(function (n) { var d = Math.hypot(n.x - p.x, n.y - p.y); if (d < n.r + 8 && d < bd) { best = n; bd = d; } }); return best; }
+  function show(n) {
+    var el = document.getElementById('panel'); el.textContent = '';
+    var h = document.createElement('h2'); h.textContent = n.q ? 'Question' : (n.hit ? 'Used in answer' : 'Page'); el.appendChild(h);
+    if (!n.q) { var s = document.createElement('div'); s.className = 'slug'; s.textContent = n.id; el.appendChild(s); }
+    var t = document.createElement('div'); t.className = 'title'; t.textContent = n.q ? n.label : (n.type || ''); el.appendChild(t);
+    var p = document.createElement('div'); p.className = 'snip'; p.textContent = n.snippet || ''; el.appendChild(p);
+  }
+  var panning = null;
+  cv.addEventListener('pointerdown', function (ev) {
+    cv.setPointerCapture(ev.pointerId); var n = pick(world(ev));
+    if (n) { drag = n; sel = n; show(n); cv.classList.add('drag'); alpha = Math.max(alpha, .4); }
+    else { panning = { x: ev.clientX - cam.x, y: ev.clientY - cam.y }; sel = null; }
+  });
+  cv.addEventListener('pointermove', function (ev) {
+    if (drag) { var p = world(ev); drag.x = p.x; drag.y = p.y; alpha = Math.max(alpha, .3); return; }
+    if (panning) { cam.x = ev.clientX - panning.x; cam.y = ev.clientY - panning.y; return; }
+    var n = pick(world(ev)); if (n !== hover) { hover = n; if (n) show(n); else if (sel) show(sel); }
+  });
+  function up() { drag = null; panning = null; cv.classList.remove('drag'); }
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  cv.addEventListener('wheel', function (ev) { ev.preventDefault(); cam.k = Math.min(3, Math.max(.4, cam.k * (ev.deltaY < 0 ? 1.1 : .9))); }, { passive: false });
+  function fitView() {
+    var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    nodes.forEach(function (n) { x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x); y1 = Math.max(y1, n.y); });
+    var k = Math.min(2.2, Math.max(.4, Math.min(W / (x1 - x0 + 220), H / (y1 - y0 + 200))));
+    cam.k = k; cam.x = -((x0 + x1) / 2) * k; cam.y = -((y0 + y1) / 2) * k;
+  }
+  setTimeout(fitView, 1800);
+  show(nodes[0]);
+})();
+</script>

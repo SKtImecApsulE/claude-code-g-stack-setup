@@ -1,0 +1,12 @@
+{
+  "name": "brain-app",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "scripts": { "start": "bun server.mjs" },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "latest",
+    "@modelcontextprotocol/sdk": "latest",
+    "zod": "^4.0.0"
+  }
+}
