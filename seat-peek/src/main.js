@@ -96,7 +96,7 @@ function openCoach(i) {
   const coach = state.train.coaches[i];
   state.cls = CLASSES[coach.cls];
   state.layout = buildLayout(state.cls);
-  scene.setCoach(state.layout, state.cls);
+  scene.setCoach(state.layout, state.cls, coach.id);
   $('coaches').innerHTML = state.train.coaches
     .map((c, k) => `
       <button class="coach ${k === i ? 'on' : ''}" data-coach="${k}">

@@ -1,38 +1,50 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CAR } from './layout.js';
+import { World } from './world.js';
+import { fabricTextures, speckleTexture, displayTexture, rng } from './textures.js';
 
 const PRESETS = {
   day: {
-    top: 0x2f7fd8, horizon: 0xcfe5f4, sun: 0xfff3dc, sunI: 2.6, hemiI: 1.5,
-    interior: 0.38, exposure: 1.0, sunDir: [0.7, 0.75, -0.3],
+    sunDir: [0.74, 0.6, -0.3], sun: 0xfff1dc, sunI: 5.2, hemiI: 0.9, envI: 1.25,
+    lamps: 3.2, panel: 1.6, exposure: 0.62, fog: 0xc6d6e4, turbidity: 4.5, rayleigh: 1.3,
+    top: 0x3f7fd0, horizon: 0xd4e3ef, envGround: 0x8f8d86, cloud: 0xffffff, cloudOpacity: 0.95,
   },
   golden: {
-    top: 0x2b4a80, horizon: 0xf7b47a, sun: 0xff9a55, sunI: 2.4, hemiI: 0.9,
-    interior: 0.36, exposure: 1.0, sunDir: [0.9, 0.2, -0.35],
+    sunDir: [0.93, 0.13, -0.34], sun: 0xffa45e, sunI: 5.6, hemiI: 0.5, envI: 0.9,
+    lamps: 3.6, panel: 1.8, exposure: 0.62, fog: 0xdfae8a, turbidity: 9, rayleigh: 3.2,
+    top: 0x3d5f9c, horizon: 0xf2b383, envGround: 0x86705f, cloud: 0xffc9a3, cloudOpacity: 0.9,
   },
   night: {
-    top: 0x03050c, horizon: 0x141c33, sun: 0x8ea5d9, sunI: 0.22, hemiI: 0.16,
-    interior: 0.6, exposure: 1.05, sunDir: [0.5, 0.6, -0.3],
+    night: true,
+    sunDir: [0.5, 0.62, -0.3], sun: 0x9db3e3, sunI: 0.35, hemiI: 0.1, envI: 0.12,
+    lamps: 5.5, panel: 3.2, exposure: 0.8, fog: 0x0c1222,
+    top: 0x02040a, horizon: 0x131b31, envGround: 0x05070c, cloud: 0x26304a, cloudOpacity: 0.5,
   },
 };
 
-const TILE = 1200; // scenery repeats every TILE metres
-const GROUND_Y = -1.2;
-const EYE_Y = 1.22;
+const EYE_Y = 1.24;
 const SPEED = 36; // m/s, about 130 km/h
-
-function rng(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+const WALL_TOP = 1.95; // where the side wall meets the curved ceiling
+const CEIL_RISE = 0.36;
 
 const nearestAngle = (target, current) =>
   target + Math.PI * 2 * Math.round((current - target) / (Math.PI * 2));
+
+// Move a geometry into place so several can be merged into one mesh.
+function put(geo, x, y, z, rx = 0, ry = 0, rz = 0) {
+  const m = new THREE.Matrix4().compose(
+    new THREE.Vector3(x, y, z),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)),
+    new THREE.Vector3(1, 1, 1),
+  );
+  return geo.applyMatrix4(m);
+}
+// RoundedBoxGeometry is non-indexed; make everything match before merging.
+const merge = (geos) => mergeGeometries(geos.map((g) => (g.index ? g.toNonIndexed() : g)));
+const rbox = (w, h, d, r) => new RoundedBoxGeometry(w, h, d, 3, r);
+const bx = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 
 export class SeatScene {
   constructor(canvas) {
@@ -40,53 +52,48 @@ export class SeatScene {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.Fog(0xffffff, 120, 1700);
+    this.scene.fog = new THREE.Fog(0xffffff, 150, 2600);
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.06, 4200);
     this.camera.rotation.order = 'YXZ';
 
-    this.hemi = new THREE.HemisphereLight(0xffffff, 0x5b6b4a, 1);
+    this.hemi = new THREE.HemisphereLight(0xffffff, 0x8d8a82, 1);
     this.sun = new THREE.DirectionalLight(0xffffff, 1);
-    this.scene.add(this.hemi, this.sun);
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun.shadow.bias = -0.0006;
+    this.sun.shadow.normalBias = 0.025;
+    this.scene.add(this.hemi, this.sun, this.sun.target);
 
-    this.skyUniforms = {
-      top: { value: new THREE.Color() },
-      horizon: { value: new THREE.Color() },
+    this.world = new World(this.scene);
+    this.envCache = {};
+
+    this.tex = {
+      fabric: fabricTextures([3, 3]),
+      carpet: fabricTextures([2, 40]),
+      floor: speckleTexture([96, 100, 108], 30, [6, 36], 3),
+      wall: speckleTexture([236, 233, 226], 7, [1, 8], 5),
     };
-    const sky = new THREE.Mesh(
-      new THREE.SphereGeometry(3800, 24, 12),
-      new THREE.ShaderMaterial({
-        uniforms: this.skyUniforms,
-        side: THREE.BackSide,
-        depthWrite: false,
-        fog: false,
-        vertexShader: 'varying float h; void main(){ h = normalize(position).y; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-        fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying float h; void main(){ float t = pow(clamp(h,0.0,1.0),0.55); gl_FragColor = vec4(mix(horizon, top, t),1.0); }',
-      }),
-    );
-    sky.frustumCulled = false;
-    this.scene.add(sky);
-
-    this.interiorMats = [];
-    this.buildWorld();
 
     this.car = null;
     this.layout = null;
     this.seat = null;
+    this.lamps = [];
     this.mode = 'overview';
-    this.pos = new THREE.Vector3(0, 1.95, 4);
+    this.pos = new THREE.Vector3(0, 1.9, 4);
     this.tpos = this.pos.clone();
     this.yaw = this.tyaw = 0;
     this.pitch = this.tpitch = -0.38;
-    this.baseFov = 68;
     this.zoom = 1;
-    this.scroll = 0;
     this.time = 0;
     this.running = false;
     this.onUserLook = null;
+    this.presetName = 'day';
+    this.preset = PRESETS.day;
 
-    this.setTime('day');
     this.bindInput();
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas.parentElement);
@@ -95,333 +102,276 @@ export class SeatScene {
     this.frame = this.frame.bind(this);
   }
 
-  // ---------- outside world ----------
-
-  buildWorld() {
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(7000, 7000),
-      new THREE.MeshLambertMaterial({ color: 0x6f9a48 }),
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = GROUND_Y;
-    this.scene.add(ground);
-
-    this.tiles = [0, 1, 2].map(() => this.buildTile());
-    this.tiles.forEach((t) => this.scene.add(t));
-  }
-
-  buildTile() {
-    const rand = rng(20411);
-    const g = new THREE.Group();
-    const d = new THREE.Object3D();
-    const col = new THREE.Color();
-    const side = () => (rand() < 0.5 ? -1 : 1);
-    const make = (geo, mat, n) => {
-      const m = new THREE.InstancedMesh(geo, mat, n);
-      m.frustumCulled = false;
-      g.add(m);
-      return m;
-    };
-
-    // Ballast bed and the neighbouring track, in short segments: very long
-    // thin boxes cause depth artefacts on some GPUs.
-    const ballast = new THREE.Mesh(
-      new THREE.BoxGeometry(11, 0.3, TILE),
-      new THREE.MeshLambertMaterial({ color: 0x8d8780 }),
-    );
-    ballast.position.set(1.6, GROUND_Y + 0.15, TILE / 2);
-    g.add(ballast);
-    const SEG = 40;
-    const rails = make(
-      new THREE.BoxGeometry(0.09, 0.14, SEG),
-      new THREE.MeshLambertMaterial({ color: 0x4a4744 }),
-      (TILE / SEG) * 2,
-    );
-    for (let i = 0; i < TILE / SEG; i++) {
-      [4.0, 5.5].forEach((x, j) => {
-        d.position.set(x, GROUND_Y + 0.37, (i + 0.5) * SEG);
-        d.rotation.set(0, 0, 0);
-        d.scale.set(1, 1, 1);
-        d.updateMatrix();
-        rails.setMatrixAt(i * 2 + j, d.matrix);
-      });
-    }
-
-    // fields
-    const nFields = 46;
-    const fieldGeo = new THREE.PlaneGeometry(1, 1);
-    fieldGeo.rotateX(-Math.PI / 2);
-    const fields = make(fieldGeo, new THREE.MeshLambertMaterial(), nFields);
-    const fieldColors = [0x89a84c, 0xb9b458, 0x5d8c40, 0xa1894f, 0x7fae5a, 0xc9bf6a];
-    for (let i = 0; i < nFields; i++) {
-      const w = 40 + rand() * 120;
-      const len = 50 + rand() * 160;
-      d.position.set(side() * (14 + w / 2 + rand() * 420), GROUND_Y + 0.03 + i * 0.002, rand() * TILE);
-      d.rotation.set(0, 0, 0);
-      d.scale.set(w, 1, len);
-      d.updateMatrix();
-      fields.setMatrixAt(i, d.matrix);
-      fields.setColorAt(i, col.setHex(fieldColors[Math.floor(rand() * fieldColors.length)]));
-    }
-
-    // trees
-    const nTrees = 170;
-    const trunkGeo = new THREE.CylinderGeometry(0.18, 0.25, 1, 5);
-    trunkGeo.translate(0, 0.5, 0);
-    const crownGeo = new THREE.IcosahedronGeometry(1, 0);
-    const trunks = make(trunkGeo, new THREE.MeshLambertMaterial({ color: 0x5a4632 }), nTrees);
-    const crowns = make(crownGeo, new THREE.MeshLambertMaterial({ flatShading: true }), nTrees);
-    for (let i = 0; i < nTrees; i++) {
-      const x = side() * (11 + Math.pow(rand(), 1.8) * 330);
-      const z = rand() * TILE;
-      const h = 3.5 + rand() * 5;
-      const r = 1.6 + rand() * 2;
-      d.rotation.set(0, rand() * 6, 0);
-      d.position.set(x, GROUND_Y, z);
-      d.scale.set(1, h * 0.55, 1);
-      d.updateMatrix();
-      trunks.setMatrixAt(i, d.matrix);
-      d.position.set(x, GROUND_Y + h * 0.55 + r * 0.55, z);
-      d.scale.set(r, r * (0.9 + rand() * 0.5), r);
-      d.updateMatrix();
-      crowns.setMatrixAt(i, d.matrix);
-      crowns.setColorAt(i, col.setHSL(0.26 + rand() * 0.1, 0.45 + rand() * 0.2, 0.22 + rand() * 0.14));
-    }
-
-    // houses
-    const nHouses = 16;
-    const wallGeo = new THREE.BoxGeometry(1, 1, 1);
-    wallGeo.translate(0, 0.5, 0);
-    const roofGeo = new THREE.ConeGeometry(0.78, 1, 4);
-    roofGeo.rotateY(Math.PI / 4);
-    roofGeo.translate(0, 0.5, 0);
-    const walls = make(wallGeo, new THREE.MeshLambertMaterial(), nHouses);
-    const roofs = make(roofGeo, new THREE.MeshLambertMaterial(), nHouses);
-    const wallColors = [0xf0e3c8, 0xe6d2b0, 0xd9e2e8, 0xf2c9a0, 0xfaf3e6];
-    const roofColors = [0xa3523a, 0x7a4636, 0x54606b];
-    for (let i = 0; i < nHouses; i++) {
-      const x = side() * (28 + rand() * 220);
-      const z = rand() * TILE;
-      const w = 6 + rand() * 5;
-      const h = 3 + rand() * 2.5;
-      d.rotation.set(0, rand() * 0.6 - 0.3, 0);
-      d.position.set(x, GROUND_Y, z);
-      d.scale.set(w, h, w * 0.8);
-      d.updateMatrix();
-      walls.setMatrixAt(i, d.matrix);
-      walls.setColorAt(i, col.setHex(wallColors[Math.floor(rand() * wallColors.length)]));
-      d.position.y = GROUND_Y + h;
-      d.scale.set(w * 1.05, 2 + rand(), w * 0.85);
-      d.updateMatrix();
-      roofs.setMatrixAt(i, d.matrix);
-      roofs.setColorAt(i, col.setHex(roofColors[Math.floor(rand() * roofColors.length)]));
-    }
-
-    // overhead-line masts right beside the track
-    const nMasts = TILE / 60;
-    const mastGeo = new THREE.BoxGeometry(0.22, 7.2, 0.22);
-    mastGeo.translate(0, 3.6, 0);
-    const armGeo = new THREE.BoxGeometry(2.6, 0.1, 0.1);
-    const mastMat = new THREE.MeshLambertMaterial({ color: 0x6b7178 });
-    const masts = make(mastGeo, mastMat, nMasts * 2);
-    const arms = make(armGeo, mastMat, nMasts * 2);
-    let k = 0;
-    for (let i = 0; i < nMasts; i++) {
-      for (const [x, dir] of [[-3.5, 1], [7.4, -1]]) {
-        d.rotation.set(0, 0, 0);
-        d.scale.set(1, 1, 1);
-        d.position.set(x, GROUND_Y, i * 60 + 12);
-        d.updateMatrix();
-        masts.setMatrixAt(k, d.matrix);
-        d.position.set(x + dir * 1.3, GROUND_Y + 6.6, i * 60 + 12);
-        d.updateMatrix();
-        arms.setMatrixAt(k, d.matrix);
-        k++;
-      }
-    }
-
-    // distant hills
-    const nHills = 9;
-    const hillGeo = new THREE.ConeGeometry(1, 1, 7);
-    hillGeo.translate(0, 0.5, 0);
-    const hills = make(hillGeo, new THREE.MeshLambertMaterial({ flatShading: true }), nHills);
-    for (let i = 0; i < nHills; i++) {
-      const r = 180 + rand() * 260;
-      d.rotation.set(0, rand() * 6, 0);
-      d.position.set(side() * (620 + rand() * 500), GROUND_Y - 4, (i + rand() * 0.6) * (TILE / nHills));
-      d.scale.set(r, 60 + rand() * 170, r * (1 + rand() * 0.8));
-      d.updateMatrix();
-      hills.setMatrixAt(i, d.matrix);
-      hills.setColorAt(i, col.setHSL(0.3 + rand() * 0.06, 0.25, 0.3 + rand() * 0.1));
-    }
-
-    return g;
-  }
-
   // ---------- coach interior ----------
 
-  setCoach(layout, cls) {
+  setCoach(layout, cls, label = '') {
     if (this.car) {
       this.scene.remove(this.car);
       this.car.traverse((o) => {
         if (o.geometry) o.geometry.dispose();
         if (o.material) o.material.dispose();
       });
+      this.displayTex?.dispose();
     }
-    this.interiorMats = [];
     this.layout = layout;
     this.seat = null;
     this.seatColor = new THREE.Color(cls.seat);
-    this.car = this.buildCar(layout, cls);
+    this.car = this.buildCar(layout, cls, label);
     this.scene.add(this.car);
-    this.applyInterior();
+
+    // fit the sun's shadow box to this coach
+    const cam = this.sun.shadow.camera;
+    cam.left = -layout.length / 2 - 2;
+    cam.right = layout.length / 2 + 2;
+    cam.top = 4.5;
+    cam.bottom = -3.5;
+    cam.near = 1;
+    cam.far = 80;
+    cam.updateProjectionMatrix();
+
+    this.setTime(this.presetName);
     this.showOverview(true);
   }
 
-  mat(color) {
-    const m = new THREE.MeshLambertMaterial({ color, emissive: color });
-    this.interiorMats.push(m);
-    return m;
-  }
-
-  buildCar(L, cls) {
+  buildCar(L, cls, label) {
     const g = new THREE.Group();
-    const { halfW, height, winBottom, winTop } = CAR;
+    const { halfW, winBottom, winTop } = CAR;
     const len = L.length;
-    const box = (w, h, dz, mat, x, y, z) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, dz), mat);
+    const std = (o) => new THREE.MeshStandardMaterial(o);
+    const add = (geo, mat, x = 0, y = 0, z = 0, shadow = 'both') => {
+      const m = new THREE.Mesh(geo, mat);
       m.position.set(x, y, z);
+      m.castShadow = shadow === 'both' || shadow === 'cast';
+      m.receiveShadow = shadow === 'both' || shadow === 'receive';
       g.add(m);
       return m;
     };
 
-    const wallMat = this.mat(0xe9e6df);
-    const trimMat = this.mat(0xc9c5bd);
-    const floorMat = this.mat(0x5d6068);
-    const carpetMat = this.mat(cls.carpet);
-    const darkMat = this.mat(0x2b2e35);
-    const ceilMat = this.mat(0xf3f1ec);
+    const wallMat = std({ color: 0xffffff, map: this.tex.wall, roughness: 0.72 });
+    const lowerMat = std({ color: 0xb9c0c9, roughness: 0.65 });
+    const trimMat = std({ color: 0xd6d3cc, roughness: 0.55 });
+    const darkMat = std({ color: 0x25282e, roughness: 0.5 });
+    const metalMat = std({ color: 0xc3c7cc, metalness: 0.9, roughness: 0.32 });
+    const floorMat = std({ color: 0xffffff, map: this.tex.floor, roughness: 0.55 });
+    const carpetMat = std({
+      color: cls.carpet, map: this.tex.carpet.map, bumpMap: this.tex.carpet.bump, bumpScale: 0.6, roughness: 0.95,
+    });
+    const ceilMat = std({ color: 0xf2f0eb, roughness: 0.85, side: THREE.DoubleSide });
+    const glassMat = std({
+      color: 0xbfd6df, transparent: true, opacity: 0.1, roughness: 0.03, metalness: 0, depthWrite: false,
+      side: THREE.DoubleSide, envMapIntensity: 1.6,
+    });
+    this.panelMat = std({ color: 0xffffff, emissive: 0xfff4de, emissiveIntensity: 1 });
 
-    box(halfW * 2, 0.1, len, floorMat, 0, -0.05, 0);
     const aisleX = (L.seats[L.a - 1].x + L.seats[L.a].x) / 2;
     const aisleW = L.seats[L.a].x - L.seats[L.a - 1].x - L.seatW;
-    box(aisleW, 0.012, len - 0.2, carpetMat, aisleX, 0.006, 0);
-    box(halfW * 2 + 0.2, 0.1, len, ceilMat, 0, height + 0.05, 0);
+
+    // Floor
+    add(bx(halfW * 2, 0.1, len), floorMat, 0, -0.05, 0, 'receive');
+    add(bx(aisleW + 0.04, 0.012, L.seatLen + 0.5), carpetMat, aisleX, 0.006, 0, 'receive');
+
+    // Curved ceiling, with an outer roof slab that keeps the sun out
+    const R = (halfW * halfW + CEIL_RISE * CEIL_RISE) / (2 * CEIL_RISE);
+    const halfAngle = Math.asin(halfW / R);
+    const cove = new THREE.CylinderGeometry(R, R, len, 28, 1, true, Math.PI - halfAngle, halfAngle * 2);
+    cove.rotateX(Math.PI / 2);
+    const arcY = WALL_TOP + CEIL_RISE - R;
+    add(cove, ceilMat, 0, arcY, 0, 'receive');
+    add(bx(halfW * 2 + 0.4, 0.08, len + 0.3), darkMat, 0, WALL_TOP + CEIL_RISE + 0.12, 0, 'cast');
+    const ceilAt = (x) => arcY + Math.sqrt(R * R - x * x);
+    add(bx(0.46, 0.02, L.seatLen + 0.8), this.panelMat, aisleX, ceilAt(Math.abs(aisleX) + 0.23) - 0.012, 0, 'none');
+    for (const dx of [-0.4, 0.4]) {
+      add(bx(0.07, 0.015, L.seatLen + 0.8), darkMat, aisleX + dx, ceilAt(aisleX + dx) - 0.016, 0, 'none');
+    }
 
     // Side walls with window openings
-    const glassMat = new THREE.MeshBasicMaterial({
-      color: 0x9fc4d6, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false,
+    const ww = CAR.winWidth;
+    const wh = winTop - winBottom;
+    const frameShape = new THREE.Shape();
+    frameShape.moveTo(-ww / 2 - 0.07, -wh / 2 - 0.07);
+    frameShape.lineTo(ww / 2 + 0.07, -wh / 2 - 0.07);
+    frameShape.lineTo(ww / 2 + 0.07, wh / 2 + 0.07);
+    frameShape.lineTo(-ww / 2 - 0.07, wh / 2 + 0.07);
+    frameShape.closePath();
+    const hole = new THREE.Path();
+    const hw = ww / 2 - 0.035;
+    const hh = wh / 2 - 0.035;
+    const hr = 0.13;
+    hole.moveTo(-hw + hr, -hh);
+    hole.lineTo(hw - hr, -hh);
+    hole.quadraticCurveTo(hw, -hh, hw, -hh + hr);
+    hole.lineTo(hw, hh - hr);
+    hole.quadraticCurveTo(hw, hh, hw - hr, hh);
+    hole.lineTo(-hw + hr, hh);
+    hole.quadraticCurveTo(-hw, hh, -hw, hh - hr);
+    hole.lineTo(-hw, -hh + hr);
+    hole.quadraticCurveTo(-hw, -hh, -hw + hr, -hh);
+    frameShape.holes.push(hole);
+    const frameGeo = new THREE.ExtrudeGeometry(frameShape, {
+      depth: 0.035, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 2, curveSegments: 8,
     });
-    const frameMat = this.mat(0x9a9892);
+    const blindMat = std({ color: 0xcfc6b4, roughness: 0.9, side: THREE.DoubleSide });
+    const rand = rng(L.rows * 31 + L.cols);
+    const midY = (winBottom + winTop) / 2;
+
     for (const sx of [-1, 1]) {
       const x = sx * (halfW + 0.05);
-      box(0.1, winBottom, len, wallMat, x, winBottom / 2, 0);
-      box(0.1, height - winTop, len, wallMat, x, (height + winTop) / 2, 0);
+      add(bx(0.1, winBottom, len), lowerMat, x, winBottom / 2, 0);
+      add(bx(0.1, WALL_TOP - winTop + 0.02, len), wallMat, x, (WALL_TOP + winTop) / 2 + 0.01, 0);
       let cursor = -len / 2;
-      const midY = (winBottom + winTop) / 2;
-      const midH = winTop - winBottom;
       for (const [w0, w1] of [...L.windows, [len / 2, len / 2]]) {
-        if (w0 > cursor) box(0.1, midH, w0 - cursor, wallMat, x, midY, (w0 + cursor) / 2);
-        cursor = w1;
-        if (w1 > w0) {
-          const glass = new THREE.Mesh(new THREE.PlaneGeometry(w1 - w0, midH), glassMat);
-          glass.rotation.y = Math.PI / 2;
-          glass.position.set(x, midY, (w0 + w1) / 2);
-          g.add(glass);
-          // sill and window shade housing
-          box(0.16, 0.03, w1 - w0 + 0.06, frameMat, sx * (halfW - 0.02), winBottom, (w0 + w1) / 2);
-          box(0.14, 0.05, w1 - w0 + 0.06, frameMat, sx * (halfW - 0.01), winTop, (w0 + w1) / 2);
+        if (w0 > cursor) add(bx(0.1, wh, w0 - cursor), wallMat, x, midY, (w0 + cursor) / 2);
+        // rack bracket on each pillar between windows
+        if (w0 > cursor && cursor > -len / 2 && w0 < len / 2) {
+          add(bx(0.36, 0.035, 0.03), darkMat, sx * (halfW - 0.19), 1.8, (w0 + cursor) / 2, 'cast');
         }
+        cursor = w1;
+        if (w1 <= w0) continue;
+        const zc = (w0 + w1) / 2;
+        const glass = add(new THREE.PlaneGeometry(ww, wh), glassMat, sx * (halfW + 0.085), midY, zc, 'none');
+        glass.rotation.y = Math.PI / 2;
+        const frame = add(frameGeo, trimMat, sx * halfW, midY, zc, 'receive');
+        frame.rotation.y = -sx * Math.PI / 2;
+        const drop = 0.05 + rand() * (rand() < 0.25 ? 0.3 : 0.1);
+        const blind = add(new THREE.PlaneGeometry(ww - 0.06, drop), blindMat, sx * (halfW + 0.03), winTop - drop / 2, zc);
+        blind.rotation.y = Math.PI / 2;
+        add(bx(0.03, 0.025, ww - 0.06), trimMat, sx * (halfW + 0.03), winTop - drop, zc);
       }
-      // luggage rack
-      box(0.42, 0.03, L.seatLen + 0.6, trimMat, sx * (halfW - 0.21), 1.86, 0);
-      box(0.03, 0.06, L.seatLen + 0.6, frameMat, sx * (halfW - 0.42), 1.89, 0);
+      // heater duct along the floor, and the luggage rack
+      add(bx(0.07, 0.16, L.seatLen + 0.4), trimMat, sx * (halfW - 0.035), 0.08, 0);
+      add(bx(0.4, 0.012, L.seatLen + 0.5), glassMat, sx * (halfW - 0.2), 1.82, 0, 'none');
+      const rail = new THREE.CylinderGeometry(0.016, 0.016, L.seatLen + 0.5, 10);
+      rail.rotateX(Math.PI / 2);
+      add(rail, metalMat, sx * (halfW - 0.41), 1.845, 0);
     }
 
-    // End walls with a door and a small info display
-    const lightMat = new THREE.MeshBasicMaterial({ color: 0xfff6e2 });
-    const signMat = new THREE.MeshBasicMaterial({ color: 0xffb347 });
+    // End walls: door with a window, passenger display, glazed partitions
+    this.displayTex = displayTexture(`${label}  ${cls.name.toUpperCase()}  ·  ${Math.round(SPEED * 3.6)} km/h`);
+    const displayMat = new THREE.MeshBasicMaterial({ map: this.displayTex, toneMapped: false });
     for (const sz of [-1, 1]) {
-      const z = sz * (len / 2 + 0.05);
-      box(halfW * 2 + 0.2, height, 0.1, wallMat, 0, height / 2, z);
-      box(0.95, 2.0, 0.04, darkMat, aisleX, 1.0, sz * (len / 2 - 0.01));
-      box(0.6, 0.11, 0.03, signMat, aisleX, 2.12, sz * (len / 2 - 0.02));
-      // partition between vestibule and seating
-      const pz = sz * (L.seatLen / 2 + 0.25);
-      const leftW = aisleX - aisleW / 2 + halfW;
-      const rightW = halfW - (aisleX + aisleW / 2);
-      box(leftW, 1.95, 0.05, trimMat, -halfW + leftW / 2, 0.975, pz);
-      box(rightW, 1.95, 0.05, trimMat, halfW - rightW / 2, 0.975, pz);
-    }
+      add(bx(halfW * 2 + 0.2, WALL_TOP + CEIL_RISE, 0.1), wallMat, 0, (WALL_TOP + CEIL_RISE) / 2, sz * (len / 2 + 0.05));
+      const dz = sz * (len / 2 - 0.02);
+      add(bx(1.0, 2.02, 0.03), trimMat, aisleX, 1.01, dz, 'receive');
+      add(bx(0.88, 1.94, 0.04), lowerMat, aisleX, 0.98, dz - sz * 0.01, 'receive');
+      add(bx(0.5, 0.75, 0.05), darkMat, aisleX, 1.4, dz - sz * 0.012, 'none');
+      add(bx(0.03, 0.22, 0.05), metalMat, aisleX + 0.36, 1.02, dz - sz * 0.04, 'none');
+      const disp = add(new THREE.PlaneGeometry(0.8, 0.1), displayMat, aisleX, 2.1, dz - sz * 0.03, 'none');
+      disp.rotation.y = sz > 0 ? Math.PI : 0;
 
-    // Ceiling light strips
-    for (const x of [aisleX - 0.42, aisleX + 0.42]) {
-      box(0.09, 0.02, len - 1, lightMat, x, height - 0.01, 0);
+      const pz = sz * (L.seatLen / 2 + 0.27);
+      const spans = [
+        [-halfW, aisleX - aisleW / 2 - 0.02],
+        [aisleX + aisleW / 2 + 0.02, halfW],
+      ];
+      for (const [x0, x1] of spans) {
+        const cx = (x0 + x1) / 2;
+        add(bx(x1 - x0, 1.15, 0.045), trimMat, cx, 0.575, pz);
+        add(bx(x1 - x0, 0.7, 0.012), glassMat, cx, 1.5, pz, 'none');
+        add(bx(x1 - x0, 0.03, 0.03), metalMat, cx, 1.86, pz);
+        const edgeX = x0 === -halfW ? x1 : x0;
+        add(bx(0.03, 1.87, 0.05), metalMat, edgeX, 0.935, pz);
+      }
     }
 
     // Tables between the two facing halves
     const tableZ = (L.rowInfo[L.half - 1].z + L.rowInfo[L.half].z) / 2;
-    const tableMat = this.mat(0xb48a5a);
+    const tableMat = std({ color: 0xd9d4c8, roughness: 0.4 });
     const blocks = [
       [L.seats[0].x - L.seatW / 2, L.seats[L.a - 1].x + L.seatW / 2],
       [L.seats[L.a].x - L.seatW / 2, L.seats[L.cols - 1].x + L.seatW / 2],
     ];
     for (const [x0, x1] of blocks) {
-      box(x1 - x0 - 0.04, 0.035, 0.5, tableMat, (x0 + x1) / 2, 0.72, tableZ);
-      box(0.07, 0.7, 0.07, darkMat, (x0 + x1) / 2, 0.35, tableZ);
+      const cx = (x0 + x1) / 2;
+      add(rbox(x1 - x0 - 0.04, 0.03, 0.5, 0.012), tableMat, cx, 0.73, tableZ);
+      add(bx(x1 - x0 - 0.02, 0.012, 0.52), darkMat, cx, 0.716, tableZ);
+      add(new THREE.CylinderGeometry(0.035, 0.05, 0.71, 12), metalMat, cx, 0.355, tableZ);
+    }
+
+    // Warm ceiling lamps down the aisle
+    this.lamps = [];
+    const nLamps = Math.max(3, Math.round(L.seatLen / 4));
+    for (let i = 0; i < nLamps; i++) {
+      const lamp = new THREE.PointLight(0xfff0d8, 1, 9, 1.6);
+      lamp.position.set(aisleX, 2.05, -L.seatLen / 2 + ((i + 0.5) * L.seatLen) / nLamps);
+      g.add(lamp);
+      this.lamps.push(lamp);
     }
 
     this.buildSeats(g, L);
     return g;
   }
 
+  // One seat is modelled once, facing -Z with its origin on the floor, then instanced.
   buildSeats(g, L) {
-    const n = L.seats.length;
     const w = L.seatW;
-    const fabric = new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0x000000 });
-    const cover = this.mat(0xf2f0ea);
-    const dark = this.mat(0x2b2e35);
-    this.fabricMat = fabric;
+    const tilt = 0.14;
+    const fabricGeo = merge([
+      put(rbox(w * 0.9, 0.13, 0.5, 0.05), 0, 0.44, -0.04, 0.05),
+      put(rbox(w * 0.88, 0.64, 0.12, 0.05), 0, 0.79, 0.25, tilt),
+      put(rbox(w * 0.2, 0.5, 0.09, 0.04), -w * 0.36, 0.76, 0.215, tilt),
+      put(rbox(w * 0.2, 0.5, 0.09, 0.04), w * 0.36, 0.76, 0.215, tilt),
+      put(rbox(w * 0.74, 0.25, 0.13, 0.055), 0, 1.09, 0.27, tilt),
+    ]);
+    const clothGeo = put(rbox(w * 0.6, 0.17, 0.142, 0.06), 0, 1.14, 0.278, tilt);
+    const shellGeo = merge([
+      put(rbox(w * 0.9, 0.7, 0.04, 0.018), 0, 0.82, 0.325, tilt),
+      put(rbox(0.05, 0.045, 0.36, 0.02), -w / 2 + 0.012, 0.665, 0.02),
+      put(rbox(0.05, 0.045, 0.36, 0.02), w / 2 - 0.012, 0.665, 0.02),
+      put(bx(0.035, 0.2, 0.05), -w / 2 + 0.012, 0.56, 0.16),
+      put(bx(0.035, 0.2, 0.05), w / 2 - 0.012, 0.56, 0.16),
+      put(bx(w * 0.66, 0.15, 0.03), 0, 0.6, 0.325, tilt), // seat pocket
+      put(bx(0.05, 0.022, 0.02), 0, 1.03, 0.41, tilt), // tray latch
+      put(bx(w * 0.62, 0.05, 0.42), 0, 0.36, 0.02),
+    ]);
+    const trayGeo = put(rbox(w * 0.7, 0.3, 0.02, 0.008), 0, 0.87, 0.36, tilt);
+    const bar = new THREE.CylinderGeometry(0.012, 0.012, w * 0.7, 8);
+    const metalGeo = merge([
+      put(bx(0.06, 0.34, 0.28), 0, 0.17, 0.04),
+      put(bx(w * 0.5, 0.03, 0.34), 0, 0.015, 0.04),
+      put(bar, 0, 0.15, 0.4, 0, 0, Math.PI / 2),
+    ]);
 
+    const fabricMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, map: this.tex.fabric.map, bumpMap: this.tex.fabric.bump, bumpScale: 0.8, roughness: 0.96,
+    });
     const parts = [
-      { key: 'cushion', geo: new THREE.BoxGeometry(w * 0.9, 0.13, 0.48), mat: fabric, pos: [0, 0.43, -0.03], rot: 0 },
-      { key: 'back', geo: new THREE.BoxGeometry(w * 0.9, 0.74, 0.11), mat: fabric, pos: [0, 0.83, 0.25], rot: 0.13 },
-      { key: 'head', geo: new THREE.BoxGeometry(w * 0.78, 0.25, 0.125), mat: cover, pos: [0, 1.085, 0.283], rot: 0.13 },
-      { key: 'base', geo: new THREE.BoxGeometry(w * 0.5, 0.36, 0.3), mat: dark, pos: [0, 0.18, 0], rot: 0 },
-      { key: 'armL', geo: new THREE.BoxGeometry(0.045, 0.05, 0.4), mat: dark, pos: [-w / 2 + 0.01, 0.64, 0], rot: 0 },
-      { key: 'armR', geo: new THREE.BoxGeometry(0.045, 0.05, 0.4), mat: dark, pos: [w / 2 - 0.01, 0.64, 0], rot: 0 },
+      ['fabric', fabricGeo, fabricMat],
+      ['cloth', clothGeo, new THREE.MeshStandardMaterial({ color: 0xf4f2ec, roughness: 0.9 })],
+      ['shell', shellGeo, new THREE.MeshStandardMaterial({ color: 0x2c2f36, roughness: 0.55 })],
+      ['tray', trayGeo, new THREE.MeshStandardMaterial({ color: 0x8d9198, roughness: 0.45 })],
+      ['metal', metalGeo, new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.85, roughness: 0.4 })],
     ];
-    const seatObj = new THREE.Object3D();
-    const partObj = new THREE.Object3D();
-    const m4 = new THREE.Matrix4();
+
+    const d = new THREE.Object3D();
     this.seatMeshes = {};
-    for (const p of parts) {
-      const mesh = new THREE.InstancedMesh(p.geo, p.mat, n);
+    for (const [key, geo, mat] of parts) {
+      const mesh = new THREE.InstancedMesh(geo, mat, L.seats.length);
       mesh.frustumCulled = false;
-      partObj.position.set(...p.pos);
-      partObj.rotation.set(p.rot, 0, 0);
-      partObj.updateMatrix();
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       for (const s of L.seats) {
-        seatObj.position.set(s.x, 0, s.z);
-        seatObj.rotation.set(0, s.facing > 0 ? Math.PI : 0, 0);
-        seatObj.updateMatrix();
-        mesh.setMatrixAt(s.index, m4.multiplyMatrices(seatObj.matrix, partObj.matrix));
-        if (p.mat === fabric) mesh.setColorAt(s.index, this.seatColor);
+        d.position.set(s.x, 0, s.z);
+        d.rotation.set(0, s.facing > 0 ? Math.PI : 0, 0);
+        d.updateMatrix();
+        mesh.setMatrixAt(s.index, d.matrix);
+        if (key === 'fabric') mesh.setColorAt(s.index, this.seatColor);
       }
-      this.seatMeshes[p.key] = mesh;
+      this.seatMeshes[key] = mesh;
       g.add(mesh);
     }
   }
 
   paintSeat(seat, color) {
-    for (const key of ['cushion', 'back']) {
-      const mesh = this.seatMeshes[key];
-      mesh.setColorAt(seat.index, color);
-      mesh.instanceColor.needsUpdate = true;
-    }
+    const mesh = this.seatMeshes.fabric;
+    mesh.setColorAt(seat.index, color);
+    mesh.instanceColor.needsUpdate = true;
   }
 
   // ---------- camera ----------
+
+  seatEye(s) {
+    return this.tpos.set(s.x, EYE_Y, s.z - s.facing * 0.07);
+  }
 
   setSeat(seat) {
     if (this.seat) this.paintSeat(this.seat, this.seatColor);
@@ -430,7 +380,7 @@ export class SeatScene {
     this.paintSeat(seat, new THREE.Color(0xff8a1f));
     this.mode = 'seat';
     this.zoom = 1;
-    this.tpos.set(seat.x, EYE_Y, seat.z - seat.facing * 0.08);
+    this.seatEye(seat);
     this.look('window');
   }
 
@@ -438,9 +388,9 @@ export class SeatScene {
     this.mode = 'overview';
     this.zoom = 1;
     this.tyaw = nearestAngle(0, this.yaw);
-    this.tpitch = -0.4;
+    this.tpitch = -0.36;
     if (snap) {
-      this.pos.set(0, 1.95, this.layout.length / 2 - 1.5);
+      this.pos.set(0, 1.86, this.layout.length / 2 - 1.5);
       this.yaw = this.tyaw = 0;
       this.pitch = this.tpitch;
     }
@@ -451,18 +401,18 @@ export class SeatScene {
     if (!s) return;
     if (this.mode !== 'seat') {
       this.mode = 'seat';
-      this.tpos.set(s.x, EYE_Y, s.z - s.facing * 0.08);
+      this.seatEye(s);
     }
     const ahead = s.facing < 0 ? 0 : Math.PI;
     const windowSide = s.side === 'L' ? Math.PI / 2 : -Math.PI / 2;
     let yaw = ahead;
-    let pitch = -0.06;
+    let pitch = -0.08;
     if (where === 'window' || where === 'aisle') {
       const sideYaw = where === 'window' ? windowSide : -windowSide;
       // turn most of the way, keeping a little of the direction you face
       const toward = Math.sign(nearestAngle(ahead, sideYaw) - sideYaw) || 1;
-      yaw = sideYaw + toward * (where === 'window' ? 0.5 : 0.5);
-      pitch = where === 'window' ? 0.02 : -0.12;
+      yaw = sideYaw + toward * 0.5;
+      pitch = where === 'window' ? 0.0 : -0.14;
     }
     this.tyaw = nearestAngle(yaw, this.yaw);
     this.tpitch = pitch;
@@ -492,29 +442,25 @@ export class SeatScene {
     }, { passive: false });
   }
 
-  // ---------- look and feel ----------
+  // ---------- light ----------
 
   setTime(name) {
+    this.presetName = name;
     const p = (this.preset = PRESETS[name]);
-    this.skyUniforms.top.value.setHex(p.top);
-    this.skyUniforms.horizon.value.setHex(p.horizon);
-    this.scene.fog.color.setHex(p.horizon);
+    this.world.applyPreset(p);
+    this.scene.fog.color.setHex(p.fog);
     this.sun.color.setHex(p.sun);
     this.sun.intensity = p.sunI;
-    this.sun.position.set(...p.sunDir).multiplyScalar(100);
+    this.sun.position.set(...p.sunDir).normalize().multiplyScalar(40);
+    this.sun.target.position.set(0, 1, 0);
     this.hemi.intensity = p.hemiI;
     this.hemi.color.setHex(p.horizon);
     this.renderer.toneMappingExposure = p.exposure;
-    this.applyInterior();
-  }
-
-  applyInterior() {
-    for (const m of this.interiorMats) m.emissiveIntensity = this.preset.interior;
-    if (this.fabricMat) {
-      // per-instance colours can't drive emissive, so glow in the class colour
-      this.fabricMat.emissive.copy(this.seatColor);
-      this.fabricMat.emissiveIntensity = this.preset.interior;
-    }
+    this.envCache[name] ||= this.world.environment(this.renderer, p);
+    this.scene.environment = this.envCache[name];
+    this.scene.environmentIntensity = p.envI;
+    for (const lamp of this.lamps) lamp.intensity = p.lamps;
+    if (this.panelMat) this.panelMat.emissiveIntensity = p.panel;
   }
 
   resize() {
@@ -543,14 +489,11 @@ export class SeatScene {
     requestAnimationFrame(this.frame);
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.time += dt;
-
-    // scenery slides past; three identical tiles keep the horizon filled
-    this.scroll = (this.scroll + SPEED * dt) % TILE;
-    this.tiles.forEach((t, i) => (t.position.z = this.scroll + (i - 2) * TILE));
+    this.world.update(SPEED * dt);
 
     if (this.mode === 'overview' && this.layout) {
       const drift = (0.5 + 0.5 * Math.sin(this.time * 0.25)) * 1.6;
-      this.tpos.set(0, 1.95, this.layout.length / 2 - 1.5 - drift);
+      this.tpos.set(0, 1.86, this.layout.length / 2 - 1.5 - drift);
     }
     const k = 1 - Math.exp(-dt * 4.5);
     this.pos.lerp(this.tpos, k);

@@ -8,7 +8,7 @@ export const CLASSES = {
     rows: 9,
     pitch: 1.15,
     base: 2650,
-    seat: 0x2c6a5c,
+    seat: 0x2f8572,
     carpet: 0x3a3f4a,
   },
   exec: {
@@ -18,7 +18,7 @@ export const CLASSES = {
     rows: 11,
     pitch: 1.02,
     base: 1890,
-    seat: 0x8a2f3f,
+    seat: 0xa83848,
     carpet: 0x40364a,
   },
   chair: {
@@ -28,7 +28,7 @@ export const CLASSES = {
     rows: 15,
     pitch: 0.9,
     base: 745,
-    seat: 0x2d4f96,
+    seat: 0x3562b8,
     carpet: 0x39424f,
   },
 };
